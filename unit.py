@@ -62,6 +62,10 @@ class Unit:
         # sight_radius: int - how far it sees
         # NOT USED.
         self.sight_radius = sight_radius
+        self.rank = "soldier"
+        self.dead = False
+        self.targeted_city = None
+        self.general_following = None
 
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""
@@ -87,3 +91,20 @@ class Unit:
             return random.randint(0, 20)
         else:
             return random.randint(0, 10)
+
+    def choose_targeted_city(self, citiesDict):
+        available_cities = []
+        for fid, cities in citiesDict.items():
+            if fid != self.faction_id:
+                available_cities.extend(cities)
+
+        if len(available_cities) == 0: return None
+
+        chosen_city = min(available_cities, key=lambda city: abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y))
+        self.targeted_city = chosen_city
+
+    def choose_general(self, generals):
+        if len(generals) == 0: return None
+
+        chosen_general = min(generals, key=lambda general: abs(general.pos.x - self.pos.x) + abs(general.pos.y - self.pos.y))
+        self.general_following = chosen_general

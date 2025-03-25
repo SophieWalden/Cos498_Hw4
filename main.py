@@ -219,7 +219,7 @@ def gen_factions(gmap):
         name, color = random.choice(POSSIBLE_FACTIONS)
         factions[name] = faction.Faction(
             name, params.STARTING_FACTION_MONEY,
-            ai.AI(), color
+            ai.AI(), color, len(factions) * 999999999
         )
   
     return factions
@@ -289,13 +289,10 @@ def FactionPreTurn(cities, faction):
 # The actual turn taking function. Calls each faction's ai
 # Gathers all the commands in a giant list and returns it.
 def Turn(factions, gmap, cities_by_faction, units_by_faction):
-
     commands = []
 
     for fid, f in factions.items():
-
-        cmds = f.run_ai(factions, cities_by_faction, units_by_faction, gmap)
-        commands += cmds
+        commands.extend(f.run_ai(factions, cities_by_faction, units_by_faction, gmap))
 
     return commands
 
@@ -322,7 +319,7 @@ def shuffle(commands):
 
         if len(queued_commands[random_index]) == 0: 
             queued_commands.pop(random_index)
-
+    
     return new_commands
 
 
@@ -334,7 +331,7 @@ def RunAllCommands(commands, factions, unit_dict, cities, gmap):
 
     commands = shuffle(commands)
     combat_positions = []
-  
+    
     move_list = []
     for cmd in commands:
         if isinstance(cmd, command.MoveUnitCommand):
@@ -408,6 +405,10 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
             
             if theunit.health <= 0:
                 combat_pos = theunit.pos
+                theunit.dead = True
+            
+            if other_unit.health <= 0:
+                other_unit.dead = True
         
     # Check if the move conquerored a city
     if move_successful:

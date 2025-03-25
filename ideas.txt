@@ -43,3 +43,7 @@ TODO Order:
  - Soldiers do pathfinding
  - Create a visual way to discern between ranks / choices (Icons for commander missions, arrows for generals goals?)
  - Make basic conditional decisions that can later be changed across different AI systems
+
+List of known bugs:
+ - factions can create units in unowned cities
+ - Since all factions starting assigning unit ids at 0 then multiple units with the same id cant move in the same turn across factions

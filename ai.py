@@ -70,11 +70,49 @@ class AI:
         # the function.
         cmds = []
 
+        current_faction = None
+        current_units = units[faction_id]
+        current_cities = cities[faction_id]
+        current_cities_pos = set([(city.pos.x, city.pos.y) for city in current_cities])
+        for name, faction in factions.items():
+            if faction.ID == faction_id:
+                current_faction = faction
+
+        # Checking for dead commander / generals
+        if current_faction.commander and current_faction.commander.dead: 
+            current_faction.commander = None
+
+        for general in current_faction.generals:
+            for unit in current_units:
+                if unit.general_following and unit.general_following.dead == True:
+                    unit.general_following = False
+
+        current_faction.generals = list(filter(lambda general: general.dead == False, current_faction.generals))
+        
+
+        if not current_faction.commander:
+            current_faction.choose_commander(current_units)
+
+        retVal = True
+        while retVal and len(current_faction.generals) < len(current_units) // 5:
+            retVal = current_faction.choose_general(current_units)
+
+        
+
+        if current_faction.goal[0] == "conquer":
+            for general in current_faction.generals:
+                if general.targeted_city == None:
+                    general.choose_targeted_city(cities)
+                
+                elif (general.targeted_city.pos.x, general.targeted_city.pos.y) in current_cities_pos:
+                    general.choose_targeted_city(cities)
+
 
         # Overview: randomly select a city we own and randomly
         # select a unit type (utype). Create a BuildUnitCommand
         # This is done every turn knowing most will fail because
         # the faction does not have enough money to build them.
+
 
         for faction in factions.values():
             fid = faction.ID
@@ -87,14 +125,40 @@ class AI:
                                 random.choice(['R', 'S', 'P']))
                 cmds.append(cmd)
 
-        # Overview: issue a move to every unit giving a random
-        # direction. Directions can be found in the vec2.py file.
-        # They are single char strings: 'N', 'E', 'W', 'S'.
-        my_units = units[faction_id]
-        for u in my_units:
-            rand_dir = random.choice(list(vec2.MOVES.keys()))
-            cmd = MoveUnitCommand(faction_id, u.ID, rand_dir)
-            cmds.append(cmd)
+        # # Overview: issue a move to every unit giving a random
+        # # direction. Directions can be found in the vec2.py file.
+        # # They are single char strings: 'N', 'E', 'W', 'S'.
+        # my_units = units[faction_id]
+
+        
+        
+
+        for u in current_units:
+
+            if u.rank == "soldier" and not u.general_following:
+                u.choose_general(current_faction.generals)
+
+            targeted_city = None
+            pos = (u.pos.x, u.pos.y)
+            if not u.general_following and pos in current_cities_pos:
+    
+                rand_dir = random.choice(list(vec2.MOVES.keys()))
+                cmd = MoveUnitCommand(faction_id, u.ID, rand_dir)
+                cmds.append(cmd)
+
+            elif u.general_following:
+                targeted_city = u.general_following.targeted_city
+            elif u.targeted_city:
+                targeted_city = u.targeted_city
+
+            if targeted_city:
+                targeted_pos = targeted_city.pos
+
+                targeted_move = min(vec2.MOVES.items(), key=lambda move: ((u.pos.x+move[1].x)-targeted_pos.x)**2+((u.pos.y+move[1].y)-targeted_pos.y)**2 + random.uniform(-1, 1))[0]
+                cmd = MoveUnitCommand(faction_id, u.ID, targeted_move)
+                cmds.append(cmd)
+        
+
 
         # return all the command objects.
         return cmds
