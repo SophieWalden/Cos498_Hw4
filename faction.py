@@ -41,6 +41,7 @@ class Faction:
         if len(available_units) == 0: return False
 
         chosen_general = random.choice(available_units)
+        chosen_general.rank = "general"
         self.generals.append(chosen_general)
 
         return True

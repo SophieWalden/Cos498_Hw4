@@ -115,7 +115,9 @@ class Display:
 
                 x, y = u.display_pos
 
-                self.blit(image, x, y, 30)
+                if u.rank == "soldier": self.blit(image, x, y, 30)
+                elif u.rank == "general": self.blit(image, x - 10, y - 10, 50)
+                elif u.rank == "commander": self.blit(image, x - 20, y - 20, 70)
 
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""
@@ -656,7 +658,7 @@ def GameLoop(display):
                 
 
         display.draw_map(gmap)
-        display.battle_animation(combat_positions, 1000/speed)
+        display.battle_animation(combat_positions, 2000/speed)
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
         

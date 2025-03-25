@@ -15,6 +15,9 @@
 from command import *
 import random
 import unit
+from city import City
+import time
+
 
 class AI:
     # init:
@@ -68,6 +71,9 @@ class AI:
 
         # A list to hold our commands. This gets returned by
         # the function.
+
+        start_time = time.perf_counter()
+        time_chunks = {}
         cmds = []
 
         current_faction = None
@@ -77,6 +83,12 @@ class AI:
         for name, faction in factions.items():
             if faction.ID == faction_id:
                 current_faction = faction
+
+        current_units_pos = set([])
+        for fid, units in units.items():
+            for unit in units: current_units_pos.add((unit.pos.x, unit.pos.y))
+
+        time_chunks["get_units"] = time.perf_counter() - start_time
 
         # Checking for dead commander / generals
         if current_faction.commander and current_faction.commander.dead: 
@@ -97,6 +109,7 @@ class AI:
         while retVal and len(current_faction.generals) < len(current_units) // 5:
             retVal = current_faction.choose_general(current_units)
 
+        time_chunks["assign_general_commander"] = time.perf_counter() - time_chunks["get_units"] - start_time
         
 
         if current_faction.goal[0] == "conquer":
@@ -130,7 +143,7 @@ class AI:
         # # They are single char strings: 'N', 'E', 'W', 'S'.
         # my_units = units[faction_id]
 
-        
+        time_chunks["targeted_city_build"] = time.perf_counter() - time_chunks["assign_general_commander"]     - start_time    
         
 
         for u in current_units:
@@ -150,15 +163,32 @@ class AI:
                 targeted_city = u.general_following.targeted_city
             elif u.targeted_city:
                 targeted_city = u.targeted_city
+            elif u.rank == "commander" and current_cities_pos:
+                targeted_city_pos = min(current_cities_pos, key=lambda pos: (pos[0] - u.pos.x)**2+(pos[1] - u.pos.y)**2)
+                targeted_city = City("_", vec2.Vec2(targeted_city_pos[0], targeted_city_pos[1]), "_", "_")
+            elif len(current_cities_pos) == 0:
+                u.choose_targeted_city(cities)
+                targeted_city = u.targeted_city
+            
 
             if targeted_city:
                 targeted_pos = targeted_city.pos
+                available_moves = []
+                for name, direction in vec2.MOVES.items():
+                    new_pos = (u.pos.x + direction.x, u.pos.y + direction.y)
+                    if new_pos not in current_units_pos:
+                        available_moves.append((name, direction))
 
-                targeted_move = min(vec2.MOVES.items(), key=lambda move: ((u.pos.x+move[1].x)-targeted_pos.x)**2+((u.pos.y+move[1].y)-targeted_pos.y)**2 + random.uniform(-1, 1))[0]
-                cmd = MoveUnitCommand(faction_id, u.ID, targeted_move)
-                cmds.append(cmd)
-        
+                if available_moves:
+                    targeted_move = min(available_moves, key=lambda move: ((u.pos.x+move[1].x)-targeted_pos.x)**2+((u.pos.y+move[1].y)-targeted_pos.y)**2 + random.uniform(-1, 1))[0]
+                    cmd = MoveUnitCommand(faction_id, u.ID, targeted_move)
+                    cmds.append(cmd)
 
+        time_chunks["units_moved"] = time.perf_counter() - time_chunks["targeted_city_build"]        - start_time
+
+        # print("\n"*2, "-"*40)
+        # for key, val in time_chunks.items():
+        #     print(f"{key}: {val*1000:.2f}")
 
         # return all the command objects.
         return cmds
