@@ -12,6 +12,7 @@ import unit
 import command
 import os
 import cell_terrain
+import math
 
 # ###################################################################
 # DISPLAY
@@ -88,9 +89,7 @@ class Display:
          
                 image.fill((fcolor[0], fcolor[1], fcolor[2], 0.3), special_flags = pygame.BLEND_ADD)
 
-                x, y = self.world_to_cord([u.pos.x, u.pos.y])
-                y-= 15
-                x += 10
+                x, y = u.display_pos
 
                 self.blit(image, x, y, 30)
 
@@ -353,6 +352,9 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
                 c.faction_id = u.faction_id
                 break
 
+    if move_successful:
+        theunit.moving = True
+
 # RunBuildCommand:
 # Executes the BuildUnitCommand.
 def RunBuildCommand(cmd, factions, unit_dict, cities, gmap):
@@ -562,7 +564,29 @@ def GameLoop(display):
             if game_over[0]:
                 print(f"Winning faction: {game_over[1]}")
                 display.run = False
-            
+
+        
+
+        # Move units toward their directed pos so they don't move by teleportation
+        for fid, ulist in unit_dict.by_faction.items():
+            for u in ulist:
+
+                if u.moving:
+                    wanted_pos = u.world_to_cord(u.pos)
+                    
+                    dist = abs(wanted_pos[0] - u.display_pos[0]) + abs(wanted_pos[1] - u.display_pos[1]) 
+                    UNIT_SPEED = 1000/(speed+1)
+                    if dist <= UNIT_SPEED * 2 or dist > UNIT_SPEED * 30:
+                        u.display_pos = wanted_pos
+                        u.moving = False
+                    else:
+                        angle = math.atan2(wanted_pos[1] - u.display_pos[1], wanted_pos[0] - u.display_pos[0])
+                        x_delta, y_delta = math.cos(angle) * UNIT_SPEED, math.sin(angle) * UNIT_SPEED
+                        
+                        u.display_pos[0] += x_delta
+                        u.display_pos[1] += y_delta
+
+                
 
         display.draw_map(gmap)
         display.draw_cities(cities, factions)

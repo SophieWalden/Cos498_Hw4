@@ -36,6 +36,8 @@ def get_unit_cost(utype):
     except KeyError:
         return math.inf
 
+TILE_X_OFFSET = 24
+TILE_Y_OFFSET = 12
 class Unit:
     def __init__(self, ID, utype, faction_id, pos, health, sight_radius):
 
@@ -51,6 +53,8 @@ class Unit:
 
         # pos: vec2
         self.pos = pos
+        self.display_pos = self.world_to_cord(self.pos)
+        self.moving = False
 
         # health: int
         self.health = health
@@ -58,6 +62,13 @@ class Unit:
         # sight_radius: int - how far it sees
         # NOT USED.
         self.sight_radius = sight_radius
+
+    def world_to_cord(self, pos):
+        """Translates 2D array cords into cords for isometric rendering"""
+        x = pos.x * TILE_X_OFFSET - pos.y * TILE_X_OFFSET
+        y = pos.x * TILE_Y_OFFSET + pos.y * TILE_Y_OFFSET
+
+        return [x + 10, y - 15]
 
     def __eq__(self, o):
         return self.ID == o.ID and self.faction_id == o.faction_id
