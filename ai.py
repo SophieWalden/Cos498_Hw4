@@ -75,14 +75,17 @@ class AI:
         # select a unit type (utype). Create a BuildUnitCommand
         # This is done every turn knowing most will fail because
         # the faction does not have enough money to build them.
-        my_cities = cities[faction_id]
-        city_indexes = list(range(len(my_cities)))
-        random.shuffle(city_indexes)
-        for ci in city_indexes:
-            cmd = BuildUnitCommand(faction_id,
-                               my_cities[ci].ID, 
-                               random.choice(['R', 'S', 'P']))
-            cmds.append(cmd)
+
+        for faction in factions.values():
+            fid = faction.ID
+            my_cities = cities[fid]
+            city_indexes = list(range(len(my_cities)))
+            random.shuffle(city_indexes)
+            for ci in city_indexes:
+                cmd = BuildUnitCommand(faction_id,
+                                my_cities[ci].ID, 
+                                random.choice(['R', 'S', 'P']))
+                cmds.append(cmd)
 
         # Overview: issue a move to every unit giving a random
         # direction. Directions can be found in the vec2.py file.

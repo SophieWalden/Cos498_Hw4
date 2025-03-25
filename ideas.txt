@@ -1,0 +1,45 @@
+
+A mega-todo list of all of the upgrades that might be made for this engine
+
+Engine:
+ - Easily create new factions mid-game
+ - Ability to build unit-made structures
+  - Research structures which unlock building of advanced units
+ - Create topright display of:
+  - Factions list
+   - units controlled
+   - Cities controlled
+   - Resources per factions
+  - Speed selection
+  - Turn count
+
+Terrain:
+ - Create wood, stone, and metal tiles which units can build machines on to harvest
+  - Enemies can capture these machines? Or destroy them?
+  - Wood for basic units, stone for structures, and metal for advanced units
+
+AI:
+ - GANN evolutionary AI
+ - Basic City Conquering AI
+ - Ability to defect after condition
+ - Basic army commanding structure for all AI
+  - Break down units into three categories: commander, generals, and soldiers
+  - Commander establishes missions like "conquer cities" or "defend cities"
+  - Generals decide which cities to take their troop 
+  - Soldiers follow generals commands and do the individual pathfinding towards towns / cities
+  - When a General dies the next eldest soldier is promoted (Maybe a func that takes eldest + amount of kills?)
+  - When a commander dies the next general also evaluated is promoted
+  - Specifics of pathfinding / action decision making is what separates different AIs
+
+
+Misc Notes:
+ - Map wrapping needs to be accounted for in pathfinding
+  - For example, maybe with a 10x10 map maybe routing to [3,8] could also check shortest path to [13, 8], [3, 18], [-7, 8], and [3, -2]?
+
+TODO Order:
+ - Create basic commander, general, soldier structure
+ - Commander decides between conquer and defend
+ - Generals choose city
+ - Soldiers do pathfinding
+ - Create a visual way to discern between ranks / choices (Icons for commander missions, arrows for generals goals?)
+ - Make basic conditional decisions that can later be changed across different AI systems

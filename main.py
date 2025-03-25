@@ -25,6 +25,28 @@ TILE_X_OFFSET = 24
 TILE_Y_OFFSET = 12
 IMAGE_SIZE = 50
 
+class Animation:
+    def __init__(self, name, images, ticks_between_frames=10):
+        self.name, self.images, self.ticks_between_frames = name, self.load_animation(name, images), ticks_between_frames
+        self.index, self.ticks = 0, 0
+        self.finished = False
+
+    def load_animation(self, name, images):
+        animation = []
+        for key, value in images.items():
+            if key.startswith(name):
+                animation.append((key, value))
+        
+        animation.sort()
+        return [item[1] for item in animation]
+    
+    def get_next_image(self, speed):
+        image = self.images[int(self.ticks // self.ticks_between_frames)]
+
+        self.ticks += speed
+        if self.ticks >= len(self.images) * self.ticks_between_frames: self.finished = True
+
+        return image
 
 class Display:
     def __init__(self, screen, clock):
@@ -38,6 +60,8 @@ class Display:
         self.zoom = 1
         self.camera_pos = [0, 0]
         self.width, self.height = pygame.display.get_window_size()
+        self.queued_animations = []
+        # self.animations = {"battle": Animation("battle_animation", self.images)}
 
     # fmt: off
     def draw_gobj(self, gobj):
@@ -119,7 +143,22 @@ class Display:
         if adjusted_x > -500 and adjusted_x < self.width and adjusted_y > -500 and adjusted_y < self.height:
             adjusted_image = pygame.transform.scale(image, (size * self.zoom, size * self.zoom))
             self.screen.blit(adjusted_image, (adjusted_x, adjusted_y))
+
+    def battle_animation(self, positions, speed):
+        for position in positions:
+            self.queued_animations.append([self.world_to_cord([position.x, position.y]), Animation("battle_animation", self.images)])
             
+
+        indexes_to_remove = []
+        for i, (pos, animation) in enumerate(self.queued_animations):
+            image = animation.get_next_image(speed)
+
+            self.blit(image, pos[0], pos[1], 50)
+            if animation.finished: indexes_to_remove.append(i) 
+
+        for index in indexes_to_remove[::-1]:
+            self.queued_animations.pop(index)
+
     def load_images(self):
         images = {}
         for filename in os.listdir("images"):
@@ -134,6 +173,7 @@ class Display:
 def init_display(sw, sh):
     pygame.init()
     screen = pygame.display.set_mode((sw, sh), pygame.RESIZABLE)
+    pygame.display.set_caption('AI Faction Simulation')
     clock = pygame.time.Clock()
     display = Display(screen, clock)
     display.font = pygame.freetype.Font('JuliaMono-Bold.ttf', 18)
@@ -150,23 +190,38 @@ def init_display(sw, sh):
 def gen_game_map(width, height):
     return game_map.GameMap(width, height)
 
+POSSIBLE_FACTIONS = [
+    ["Red", (255, 0, 0)],
+    ["Blue", (0, 0, 255)],
+    ["Green", (0, 255, 0)],
+    ["Yellow", (255, 255, 0)],
+    ["Orange", (255, 165, 0)],
+    ["Purple", (128, 0, 128)],
+    ["Cyan", (0, 255, 255)],
+    ["Magenta", (255, 0, 255)],
+    ["Pink", (255, 192, 203)],
+    ["Brown", (139, 69, 19)],
+    ["Black", (0, 0, 0)],
+    ["White", (255, 255, 255)],
+    ["Gray", (169, 169, 169)],
+    ["Violet", (238, 130, 238)],
+    ["Indigo", (75, 0, 130)],
+    ["Turquoise", (64, 224, 208)],
+    ["Teal", (0, 128, 128)],
+    ["Lime", (0, 255, 0)]]
+
 
 def gen_factions(gmap):
 
     factions = {}
-    factions['Red'] = faction.Faction(
-        'Red', params.STARTING_FACTION_MONEY,
-        ai.AI(), (255, 0, 0))
-    factions['Blue'] = faction.Faction(
-        'Blue', params.STARTING_FACTION_MONEY,
-        ai.AI(), (0, 0, 255))
-    factions['Green'] = faction.Faction(
-        'Green', params.STARTING_FACTION_MONEY,
-        ai.AI(), (0, 255, 0))
-    factions['Yellow'] = faction.Faction(
-        'Yellow', params.STARTING_FACTION_MONEY,
-        ai.AI(), (255, 255, 0))
 
+    while len(factions) != 4:
+        name, color = random.choice(POSSIBLE_FACTIONS)
+        factions[name] = faction.Faction(
+            name, params.STARTING_FACTION_MONEY,
+            ai.AI(), color
+        )
+  
     return factions
 
 def gen_cities(gmap, faction_ids):
@@ -278,16 +333,19 @@ def shuffle(commands):
 def RunAllCommands(commands, factions, unit_dict, cities, gmap):
 
     commands = shuffle(commands)
-    
+    combat_positions = []
   
     move_list = []
     for cmd in commands:
         if isinstance(cmd, command.MoveUnitCommand):
-            RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list)
+            combat_position = RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list)
+            if combat_position: combat_positions.append(combat_position)
         elif isinstance(cmd, command.BuildUnitCommand):
             RunBuildCommand(cmd, factions, unit_dict, cities, gmap)
         else:
             print(f"Bad command type: {type(cmd)}")
+
+    return combat_positions
 
 # RunMoveCommand:
 # The function that handles MoveUnitCommands.
@@ -324,6 +382,7 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
     new_pos.mod(gmap.width, gmap.height)
 
     # Check if new_pos is free.
+    combat_pos = None
     move_successful = False
     if unit_dict.is_pos_free(new_pos):
         old_pos = theunit.pos
@@ -337,13 +396,18 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
         # Is the other unit an enemy?
         if other_unit.faction_id != theunit.faction_id:
             space_now_free = RunCombat(theunit, other_unit, cmd, factions, unit_dict, cities, gmap)
+            
             # Perhaps combat freed the space.
             # if so, move.
             if space_now_free:
+                combat_pos = new_pos
                 old_pos = theunit.pos
                 theunit.pos = new_pos
                 unit_dict.move_unit(u, old_pos, new_pos)
                 move_successful = True
+            
+            if theunit.health <= 0:
+                combat_pos = theunit.pos
         
     # Check if the move conquerored a city
     if move_successful:
@@ -354,6 +418,8 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
 
     if move_successful:
         theunit.moving = True
+
+    return combat_pos
 
 # RunBuildCommand:
 # Executes the BuildUnitCommand.
@@ -367,7 +433,7 @@ def RunBuildCommand(cmd, factions, unit_dict, cities, gmap):
 
         # Look for the city
         for c in cities:
-            if c.ID == cmd.city_id:
+            if c.ID == cmd.city_id and c.faction_id == f.ID:
 
                 # If there's no unit in the city, build.
                 # Add to the unit dictionary and charge
@@ -497,6 +563,7 @@ def GameLoop(display):
     factions = gen_factions(gmap)
     cities = gen_cities(gmap, list(factions.keys()))
     unit_dict = UnitDict(list(factions.keys()))
+    combat_positions = []
 
 
     # Starting game speed (real time between turns) in milliseconds.
@@ -557,7 +624,7 @@ def GameLoop(display):
             commands = Turn(factions, gmap,
                             cities_by_faction,
                             unit_dict.by_faction)
-            RunAllCommands(commands, factions, unit_dict, cities, gmap)
+            combat_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
             turn += 1
 
             game_over = CheckForGameOver(cities)
@@ -565,7 +632,6 @@ def GameLoop(display):
                 print(f"Winning faction: {game_over[1]}")
                 display.run = False
 
-        
 
         # Move units toward their directed pos so they don't move by teleportation
         for fid, ulist in unit_dict.by_faction.items():
@@ -576,7 +642,7 @@ def GameLoop(display):
                     
                     dist = abs(wanted_pos[0] - u.display_pos[0]) + abs(wanted_pos[1] - u.display_pos[1]) 
                     UNIT_SPEED = 1000/(speed+1)
-                    if dist <= UNIT_SPEED * 2 or dist > UNIT_SPEED * 30:
+                    if dist <= UNIT_SPEED * 2 or dist > 500:
                         u.display_pos = wanted_pos
                         u.moving = False
                     else:
@@ -589,8 +655,10 @@ def GameLoop(display):
                 
 
         display.draw_map(gmap)
+        display.battle_animation(combat_positions, 1000/speed)
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
+        
 
         # ###########################################3
         # RIGHT_SIDE UI
