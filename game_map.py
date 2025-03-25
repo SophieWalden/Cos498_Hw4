@@ -15,10 +15,10 @@ class GameMap:
         self.height = height
         self.width = width
         self.cells = {}
-
-
+        
         self.gen_board()
-    
+        self.cell_render_queue = sorted(self.cells.items(), key=lambda x: x[0].x + x[0].y)
+
     def gen_board(self):
         noise = [[0 for _ in range(self.width)] for _ in range(self.height)]
         board = [[0 for _ in range(self.width)] for _ in range(self.height)]
@@ -32,9 +32,10 @@ class GameMap:
 
                 for direction in [[-1, 0], [1, 0], [0, 1], [0, -1], [-1, -1], [1, 1], [1, -1], [-1, 1], [0, 0]]:
                     x, y = i + direction[0], j + direction[1]
-                    
-                    if x in range(len(noise[0])) and y in range(len(noise)):
-                        tile_sum += noise[y][x]
+                    x %= len(noise[0])
+                    y %= len(noise)
+
+                    tile_sum += noise[y][x]
                 
                 board[j][i] = int(tile_sum > 50)
         

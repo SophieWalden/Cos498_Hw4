@@ -59,8 +59,9 @@ class Display:
             width)
 
     def draw_map(self, gmap):
-        for v, c in sorted(gmap.cells.items(), key = lambda x: x[0].x + x[0].y):
+        for v, c in gmap.cell_render_queue:
             
+
             image = None
 
             if c.terrain == cell_terrain.Terrain.Open:
@@ -244,12 +245,42 @@ def Turn(factions, gmap, cities_by_faction, units_by_faction):
 
     return commands
 
+def shuffle(commands):
+    """
+    Random shuffling while more fair for multiple players made complex planning for AIs too messy
+    as a solution this shuffle randomizes the order commands are in, but keeps every command in the same
+    relative position for each faction
+    """
+
+    factions_commands = {}
+    new_commands = []
+
+    for command in commands:
+        fid = command.faction_id
+
+        if fid not in factions_commands: factions_commands[fid] = []
+        factions_commands[fid].append(command)
+
+    queued_commands = list(factions_commands.values())
+    while queued_commands:
+        random_index = random.randint(0, len(queued_commands) - 1)
+        new_commands.append(queued_commands[random_index].pop(0))
+
+        if len(queued_commands[random_index]) == 0: 
+            queued_commands.pop(random_index)
+
+    return new_commands
+
+
 # RunAllCommands:
 # Executes all commands from the current turn.
 # Shuffles the commands to reduce P1 bias (maybe).
 # Basically this is just a dispatch function.
 def RunAllCommands(commands, factions, unit_dict, cities, gmap):
-    random.shuffle(commands)
+
+    commands = shuffle(commands)
+    
+  
     move_list = []
     for cmd in commands:
         if isinstance(cmd, command.MoveUnitCommand):
