@@ -188,7 +188,7 @@ class AI:
 
         # print("\n"*2, "-"*40)
         # for key, val in time_chunks.items():
-        #     print(f"{key}: {val*1000:.2f}")
+        #     print(f"{key}: {val:f}")
 
         # return all the command objects.
         return cmds

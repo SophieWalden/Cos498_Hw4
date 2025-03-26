@@ -61,6 +61,7 @@ class Display:
         self.camera_pos = [0, 0]
         self.width, self.height = pygame.display.get_window_size()
         self.queued_animations = []
+        self.map = None
         # self.animations = {"battle": Animation("battle_animation", self.images)}
 
     # fmt: off
@@ -85,8 +86,6 @@ class Display:
 
     def draw_map(self, gmap):
         for v, c in gmap.cell_render_queue:
-            
-
             image = None
 
             if c.terrain == cell_terrain.Terrain.Open:
@@ -549,7 +548,7 @@ def handle_mouse_functions(offset):
         offset[0] += -rel[0]
         offset[1] += -rel[1]
 
-
+import time
 
 def GameLoop(display):
     global TILE_X_OFFSET, TILE_Y_OFFSET
@@ -655,13 +654,12 @@ def GameLoop(display):
                         u.display_pos[0] += x_delta
                         u.display_pos[1] += y_delta
 
-                
 
         display.draw_map(gmap)
-        display.battle_animation(combat_positions, 2000/speed)
+        display.battle_animation(combat_positions, 5)
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
-        
+
 
         # ###########################################3
         # RIGHT_SIDE UI

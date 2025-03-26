@@ -37,13 +37,16 @@ Misc Notes:
   - For example, maybe with a 10x10 map maybe routing to [3,8] could also check shortest path to [13, 8], [3, 18], [-7, 8], and [3, -2]?
 
 TODO Order:
- - Create basic commander, general, soldier structure
- - Commander decides between conquer and defend
- - Generals choose city
- - Soldiers do pathfinding
- - Create a visual way to discern between ranks / choices (Icons for commander missions, arrows for generals goals?)
  - Make basic conditional decisions that can later be changed across different AI systems
+ - Fix lag in planning stage (moving mass units)
+ - Create a visual way to discern between ranks / choices (Icons for commander missions, arrows for generals goals?)
 
 List of known bugs:
  - factions can create units in unowned cities
  - Since all factions starting assigning unit ids at 0 then multiple units with the same id cant move in the same turn across factions
+
+
+Initially to solve the sorting problem I created a sort that randomized command order, but kept each factions relative command order the same
+This solved the fairness problem between multiple faction planning
+The problem is that while doing all the planning in one tick is fine for static fields it can make animations look choppy
+To solve this I spread it out 
