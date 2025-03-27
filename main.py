@@ -152,11 +152,12 @@ class Display:
 
     def create_animation(self, positions, speed, name):
         for position in positions:
-            self.queued_animations.append([self.world_to_cord([position.x, position.y]), Animation(name, self.images)])
+            self.queued_animations.append([self.world_to_cord([position.x, position.y]), Animation(name, self.images), speed])
 
+    def render_animations(self):
         indexes_to_remove = []
-        for i, (pos, animation) in enumerate(self.queued_animations):
-            image = animation.get_next_image(speed)
+        for i, (pos, animation, animation_speed) in enumerate(self.queued_animations):
+            image = animation.get_next_image(animation_speed)
 
             self.blit(image, pos[0], pos[1], 50)
             if animation.finished: indexes_to_remove.append(i) 
@@ -681,7 +682,8 @@ def GameLoop(display):
 
         display.draw_map(gmap)
         display.create_animation(combat_positions, 5, "battle_animation")
-        display.create_animation(building_positions, 2, "woodcutter_upgrade")
+        display.create_animation(building_positions, 3, "woodcutter_upgrade")
+        display.render_animations()
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
 
@@ -693,7 +695,7 @@ def GameLoop(display):
         # display.draw_text(f"TURN {turn}", 1205, 5, "black")
         # display.draw_text(f"{'Fctn':<5} {'C':>2} {'U':>3} {'M':>4}",
         #                   1205, 25, "black")
-        # y = 45
+        # y = 45s
         # for fid, f in factions.items():
         #     num_cities = 0
         #     for c in cities:
