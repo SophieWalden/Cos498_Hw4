@@ -18,6 +18,9 @@ class GameMap:
         
         self.gen_board()
         self.cell_render_queue = sorted(self.cells.items(), key=lambda x: x[0].x + x[0].y)
+    
+    def rerender(self):
+        self.cell_render_queue = sorted(self.cells.items(), key=lambda x: x[0].x + x[0].y)
 
     def gen_board(self):
         noise = [[0 for _ in range(self.width)] for _ in range(self.height)]

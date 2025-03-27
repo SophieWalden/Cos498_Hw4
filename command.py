@@ -16,3 +16,8 @@ class BuildUnitCommand(Command):
         self.city_id = city_id
         self.utype = utype
 
+class BuildStructureCommand(Command):
+    def __init__(self, faction_id, position, utype):
+        Command.__init__(self, faction_id)
+        self.pos = position
+        self.utype = utype

@@ -16,7 +16,8 @@ class Faction:
         self.color = color
         self.commander = None
         self.generals = []
-        self.goal = ["conquer", "cities"]
+        #self.goal = ["conquer", "cities"]
+        self.goal = ["gather", "wood"]
 
     def get_next_unit_id(self):
         uid = self.next_unit_id

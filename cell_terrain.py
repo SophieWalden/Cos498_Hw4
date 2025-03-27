@@ -9,3 +9,4 @@ import enum
 class Terrain(enum.Enum):
     Open = 0
     Forest = 1
+    Woodcutter = 2

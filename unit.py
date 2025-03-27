@@ -108,3 +108,15 @@ class Unit:
 
         chosen_general = min(generals, key=lambda general: abs(general.pos.x - self.pos.x) + abs(general.pos.y - self.pos.y))
         self.general_following = chosen_general
+
+    def choose_target_terrain(self, gmap, terrain_type):
+        minimum_distance = 9999
+        for key, cell in gmap.cells.items():
+            if cell.terrain == terrain_type:
+                distance = abs(key.x - self.pos.x) + abs(key.y - self.pos.y)
+
+                if distance < minimum_distance:
+                    minimum_distance = distance
+                    self.targeted_city = key
+         
+       

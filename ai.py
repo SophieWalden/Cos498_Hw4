@@ -17,7 +17,7 @@ import random
 import unit
 from city import City
 import time
-
+import cell_terrain
 
 class AI:
     # init:
@@ -114,12 +114,16 @@ class AI:
 
         if current_faction.goal[0] == "conquer":
             for general in current_faction.generals:
-                if general.targeted_city == None:
+                if not general.targeted_city:
                     general.choose_targeted_city(cities)
                 
                 elif (general.targeted_city.pos.x, general.targeted_city.pos.y) in current_cities_pos:
                     general.choose_targeted_city(cities)
 
+        if current_faction.goal[0] == "gather":
+            for general in current_faction.generals:
+                if not general.targeted_city:
+                    general.choose_target_terrain(gmap, cell_terrain.Terrain.Forest)
 
         # Overview: randomly select a city we own and randomly
         # select a unit type (utype). Create a BuildUnitCommand
@@ -172,7 +176,11 @@ class AI:
             
 
             if targeted_city:
-                targeted_pos = targeted_city.pos
+                try:
+                    targeted_pos = targeted_city.pos
+                except Exception:
+                    targeted_pos = targeted_city
+
                 available_moves = []
                 for name, direction in vec2.MOVES.items():
                     new_pos = (u.pos.x + direction.x, u.pos.y + direction.y)
@@ -183,6 +191,10 @@ class AI:
                     targeted_move = min(available_moves, key=lambda move: ((u.pos.x+move[1].x)-targeted_pos.x)**2+((u.pos.y+move[1].y)-targeted_pos.y)**2 + random.uniform(-1, 1))[0]
                     cmd = MoveUnitCommand(faction_id, u.ID, targeted_move)
                     cmds.append(cmd)
+
+            if current_faction.goal[0] == "gather" and gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest:
+                cmds.append(BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "woodcutter"))
+                
 
         time_chunks["units_moved"] = time.perf_counter() - time_chunks["targeted_city_build"]        - start_time
 

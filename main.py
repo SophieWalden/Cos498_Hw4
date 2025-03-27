@@ -13,6 +13,7 @@ import command
 import os
 import cell_terrain
 import math
+from cell import Cell
 
 # ###################################################################
 # DISPLAY
@@ -88,10 +89,14 @@ class Display:
         for v, c in gmap.cell_render_queue:
             image = None
 
+       
             if c.terrain == cell_terrain.Terrain.Open:
                 image = self.images["open_tile"]
-            else: 
+            elif c.terrain == cell_terrain.Terrain.Forest: 
                 image = self.images["forest_tile"]
+            elif c.terrain == cell_terrain.Terrain.Woodcutter:
+                image = self.images["woodcutter_tile"]
+                
 
             x, y = self.world_to_cord((v.x, v.y))
             self.blit(image, x, y, 50)
@@ -145,10 +150,9 @@ class Display:
             adjusted_image = pygame.transform.scale(image, (size * self.zoom, size * self.zoom))
             self.screen.blit(adjusted_image, (adjusted_x, adjusted_y))
 
-    def battle_animation(self, positions, speed):
+    def create_animation(self, positions, speed, name):
         for position in positions:
-            self.queued_animations.append([self.world_to_cord([position.x, position.y]), Animation("battle_animation", self.images)])
-            
+            self.queued_animations.append([self.world_to_cord([position.x, position.y]), Animation(name, self.images)])
 
         indexes_to_remove = []
         for i, (pos, animation) in enumerate(self.queued_animations):
@@ -159,6 +163,7 @@ class Display:
 
         for index in indexes_to_remove[::-1]:
             self.queued_animations.pop(index)
+
 
     def load_images(self):
         images = {}
@@ -332,6 +337,7 @@ def RunAllCommands(commands, factions, unit_dict, cities, gmap):
 
     commands = shuffle(commands)
     combat_positions = []
+    buidling_positions = []
     
     move_list = []
     for cmd in commands:
@@ -340,10 +346,27 @@ def RunAllCommands(commands, factions, unit_dict, cities, gmap):
             if combat_position: combat_positions.append(combat_position)
         elif isinstance(cmd, command.BuildUnitCommand):
             RunBuildCommand(cmd, factions, unit_dict, cities, gmap)
+        elif isinstance(cmd, command.BuildStructureCommand):
+            building_pos = RunBuildStructureCommand(cmd, gmap)
+            if building_pos: buidling_positions.extend(building_pos)
         else:
             print(f"Bad command type: {type(cmd)}")
 
-    return combat_positions
+    return combat_positions, buidling_positions
+
+def RunBuildStructureCommand(cmd, gmap):
+    building_pos = []
+
+    position = vec2.Vec2(cmd.pos[0], cmd.pos[1])
+
+    if cmd.utype == "woodcutter":
+        gmap.cells[position] = Cell(cell_terrain.Terrain.Woodcutter)
+        building_pos.append(position)
+    
+    gmap.rerender()
+
+    return building_pos
+
 
 # RunMoveCommand:
 # The function that handles MoveUnitCommands.
@@ -566,6 +589,7 @@ def GameLoop(display):
     cities = gen_cities(gmap, list(factions.keys()))
     unit_dict = UnitDict(list(factions.keys()))
     combat_positions = []
+    building_positions = []
 
 
     # Starting game speed (real time between turns) in milliseconds.
@@ -626,7 +650,7 @@ def GameLoop(display):
             commands = Turn(factions, gmap,
                             cities_by_faction,
                             unit_dict.by_faction)
-            combat_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
+            combat_positions, building_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
             turn += 1
 
             game_over = CheckForGameOver(cities)
@@ -656,7 +680,8 @@ def GameLoop(display):
 
 
         display.draw_map(gmap)
-        display.battle_animation(combat_positions, 5)
+        display.create_animation(combat_positions, 5, "battle_animation")
+        display.create_animation(building_positions, 2, "woodcutter_upgrade")
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
 

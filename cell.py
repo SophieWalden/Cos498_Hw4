@@ -12,29 +12,23 @@
 
 import cell_terrain
 
-COLOR_DICT = {
-    cell_terrain.Terrain.Open: "olivedrab2",
-    cell_terrain.Terrain.Forest: "springgreen4"
-}
 
 ATTACK_DICT = {
     cell_terrain.Terrain.Open: 2,
-    cell_terrain.Terrain.Forest: 0
+    cell_terrain.Terrain.Forest: 0,
+    cell_terrain.Terrain.Woodcutter: 0
 }
 
 DEFENSE_DICT = {
     cell_terrain.Terrain.Open: 0,
-    cell_terrain.Terrain.Forest: 2
+    cell_terrain.Terrain.Forest: 2,
+    cell_terrain.Terrain.Woodcutter: 2
 }
 
 class Cell:
     def __init__(self, terrain):
         self.terrain = terrain
 
-    # TODO: replace this with a data member instead
-    # of a function.
-    def get_color(self):
-        return COLOR_DICT[self.terrain]
     
     def get_attack_mod(self):
         return ATTACK_DICT[self.terrain]
