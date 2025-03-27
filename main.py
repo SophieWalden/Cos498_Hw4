@@ -49,6 +49,9 @@ class Animation:
 
         return image
 
+MENU_BACKGROUND = (50, 57, 61)
+MENU_OUTLINE = "#464646"
+TEXT_COLOR = "white"
 class Display:
     def __init__(self, screen, clock):
         self.screen = screen
@@ -58,8 +61,8 @@ class Display:
         self.font = None
         self.map_cell_size = 20
         self.images = self.load_images()
-        self.zoom = 1
-        self.camera_pos = [0, 0]
+        self.zoom = 0.6
+        self.camera_pos = [-700, 100]
         self.width, self.height = pygame.display.get_window_size()
         self.queued_animations = []
         self.map = None
@@ -119,9 +122,14 @@ class Display:
 
                 x, y = u.display_pos
 
-                if u.rank == "soldier": self.blit(image, x, y, 30)
-                elif u.rank == "general": self.blit(image, x - 10, y - 10, 50)
-                elif u.rank == "commander": self.blit(image, x - 20, y - 20, 70)
+                size = 30
+                if u.rank == "general": size = 50
+                elif u.rank == "commander": size = 70
+                size += u.additional_size
+
+                self.blit(image, x - ((size - 30) // 2), y - ((size - 30) // 2), size)
+
+
 
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""
@@ -175,6 +183,119 @@ class Display:
             images[key] = pygame.image.load(full_path).convert_alpha()
 
         return images
+    
+    def draw_ui(self, turn, factions, units, cities, unit_selected=None):
+
+        winw, winh = pygame.display.get_window_size()
+
+        self.draw_rect_advanced(MENU_BACKGROUND, 150, 10, 10, 75 + 11 * len(str(turn)), 25, (MENU_OUTLINE, 3))
+        self.draw_text(f"Turn: {turn}", 15, 15, "white")
+
+        faction_colors = {key: value.color for key, value in factions.items()}
+        units_by_faction = {key: len(value) for key, value in units.by_faction.items()}
+
+        cities_by_faction = {key: sum(city.faction_id == value.ID for city in cities) for key, value in factions.items()}
+        cities_sum = len(cities)
+
+
+
+        if cities_sum > 0:
+            cities_normalized = {key: value/cities_sum for key, value in cities_by_faction.items()}
+
+            x = 150
+            for i, (key, value) in enumerate(cities_normalized.items()):
+                color = faction_colors[key]
+
+                self.draw_rect_advanced(self.darken(color, 1.5), 200,x, 10, int(value * (winw / 1.5)), 10, (self.darken(color, 3), 2))
+                x += int(value * (winw / 1.5))
+        else:
+            pygame.draw.rect(self.screen, (100, 100, 100), (200, 10, winw // 1.5, 5))
+
+
+        sidebar_mode = "general"
+        if unit_selected: sidebar_mode = "unit"
+
+        self.draw_rect_advanced(MENU_BACKGROUND, 200, winw - 200, 10, 190, winh - 200, (MENU_OUTLINE, 15))
+
+        y = 25
+        if sidebar_mode == "general":
+            menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
+
+            for fid, faction in factions.items():
+                if units_by_faction[fid] == 0: continue
+
+                pygame.draw.rect(menu_surface, self.darken(faction.color, 1.5), (10, y, 20, 20), 0)
+                pygame.draw.rect(menu_surface, (100, 100, 100), (35, y, 135, 5))
+
+                y += 25
+                
+                # Draw Unit Counts  
+                surface, rect = self.font.render(f"Units: {units_by_faction[fid]}", TEXT_COLOR)
+                menu_surface.blit(surface, (10, y))
+
+                y += 25
+
+                # Draw City Counts
+                surface, rect = self.font.render(f"Cities: {cities_by_faction[fid]}", TEXT_COLOR)
+                menu_surface.blit(surface, (10, y))
+
+                y += 25
+
+                surface, rect = self.font.render(f"Gold: {faction.money}", TEXT_COLOR)
+                menu_surface.blit(surface, (10, y))
+
+                y += 25
+
+        elif sidebar_mode == "unit":
+            menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
+
+            surface, rect = self.font.render(f"Pos: {unit_selected.pos.x} {unit_selected.pos.y}", TEXT_COLOR)
+            menu_surface.blit(surface, (10, y))
+            y += 25
+
+            surface, rect = self.font.render(f"Type: {unit_selected.utype}", TEXT_COLOR)
+            menu_surface.blit(surface, (10, y))
+            y += 25
+
+            surface, rect = self.font.render(f"Rank: {unit_selected.rank}", TEXT_COLOR)
+            menu_surface.blit(surface, (10, y))
+            y += 25
+
+        self.screen.blit(menu_surface, ((winw - 200, 10)))
+
+    def draw_rect_advanced(self, color, opacity, x, y, width, height, outline=None):
+        surface = pygame.Surface((width, height))
+        surface.set_alpha(opacity)
+        if not outline: surface.fill((color))
+        else:
+            outline_color, width = outline
+            surface.fill(outline_color)
+            surface.fill(color, surface.get_rect().inflate(-width, -width))
+
+        self.screen.blit(surface, (x, y))
+
+    def darken(self, color, strength):
+        return [pixel_value / strength for pixel_value in color]
+    
+    def get_unit_actual_pos(self, unit):
+        display_pos = unit.display_pos
+        size = 30
+        if unit.rank == "general": size = 50
+        elif unit.rank == "commander": size = 70
+        size += unit.additional_size
+
+        x, y = display_pos[0] - ((size - 30) // 2), display_pos[1] - ((size - 30) // 2)
+
+        adjusted_x = x - self.camera_pos[0]
+        adjusted_y = y - self.camera_pos[1]
+
+        adjusted_x *= self.zoom
+        adjusted_y *= self.zoom       
+        
+        visible = adjusted_x > -500 and adjusted_x < self.width and adjusted_y > -500 and adjusted_y < self.height
+        size *= self.zoom
+           
+        return adjusted_x, adjusted_y, size, visible
 
 
 def init_display(sw, sh):
@@ -183,7 +304,7 @@ def init_display(sw, sh):
     pygame.display.set_caption('AI Faction Simulation')
     clock = pygame.time.Clock()
     display = Display(screen, clock)
-    display.font = pygame.freetype.Font('JuliaMono-Bold.ttf', 18)
+    display.font = pygame.freetype.Font('JetBrainsMono-Regular.ttf', 18)
     pygame.key.set_repeat(200, 100)
     return display
 
@@ -222,8 +343,8 @@ def gen_factions(gmap):
 
     factions = {}
 
-    while len(factions) != 4:
-        name, color = random.choice(POSSIBLE_FACTIONS)
+    while len(factions) != 6:
+        name, color = POSSIBLE_FACTIONS[len(factions)]
         factions[name] = faction.Faction(
             name, params.STARTING_FACTION_MONEY,
             ai.AI(), color, len(factions) * 999999999
@@ -454,27 +575,26 @@ def RunBuildCommand(cmd, factions, unit_dict, cities, gmap):
     f = factions[cmd.faction_id]
     cost = unit.get_unit_cost(cmd.utype)
 
-    # Does the faction have the available resources (money)?
-    if f.can_build_unit(cost):
 
-        # Look for the city
-        for c in cities:
-            if c.ID == cmd.city_id and c.faction_id == f.ID:
 
-                # If there's no unit in the city, build.
-                # Add to the unit dictionary and charge
-                # the faction for its purchase.
-                if unit_dict.is_pos_free(c.pos):
+    # Look for the city
+    for c in cities:
+        if c.ID == cmd.city_id and c.faction_id == f.ID:
 
-                    uid = f.get_next_unit_id()
-                    new_unit = unit.Unit(uid, cmd.utype,
-                                         f.ID,
-                                         copy.copy(c.pos),
-                                         unit.UNIT_HEALTH[cmd.utype],
-                                         0)
-                    unit_dict.add_unit(new_unit)
+            # If there's no unit in the city, build.
+            # Add to the unit dictionary and charge
+            # the faction for its purchase.
+            if unit_dict.is_pos_free(c.pos) and f.can_build_unit(cost):
 
-                    f.money -= cost
+                uid = f.get_next_unit_id()
+                new_unit = unit.Unit(uid, cmd.utype,
+                                        f.ID,
+                                        copy.copy(c.pos),
+                                        unit.UNIT_HEALTH[cmd.utype],
+                                        0)
+                unit_dict.add_unit(new_unit)
+
+                f.money -= cost
 
 # RunCombat:
 # Called by the MoveUnitCommand if a unit tries to move into a cell
@@ -550,12 +670,16 @@ class UnitDict:
         return pos not in self.by_pos
 
 
-def CheckForGameOver(cities):
+def CheckForGameOver(cities, units):
     faction_ids_with_cities = []
     for c in cities:
         if c.faction_id not in faction_ids_with_cities:
             faction_ids_with_cities.append(c.faction_id)
-    return len(faction_ids_with_cities) == 1, faction_ids_with_cities[0]
+
+    units_by_faction = {key: len(value) for key, value in units.by_faction.items()}
+    units_sum = sum(units_by_faction.values())
+        
+    return len(faction_ids_with_cities) == 1 and units_sum == units_by_faction[faction_ids_with_cities[0]] , faction_ids_with_cities[0]
         
     
 # ###########################################################3
@@ -569,8 +693,8 @@ def handle_mouse_functions(offset):
     rel, pressed = pygame.mouse.get_rel(), pygame.mouse.get_pressed()
 
     if pressed[0]:
-        offset[0] += -rel[0]
-        offset[1] += -rel[1]
+        offset[0] += -rel[0] * 1.6
+        offset[1] += -rel[1] * 1.5
 
 import time
 
@@ -597,6 +721,9 @@ def GameLoop(display):
     speed = 1024
     ticks = 0
     turn = 1
+    GAME_OVER = False
+    pressed_time = 0
+    selected_unit = None
     while display.run:
         dt = display.clock.tick(60)
         ticks += dt
@@ -637,11 +764,19 @@ def GameLoop(display):
                                               pygame.RESIZABLE)
 
         
+        pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
+        if pressed[0] and pressed_time == 0: pressed_time = time.perf_counter()
+        if selected_unit and not pressed[0] and time.perf_counter() - pressed_time < 0.1: selected_unit = None
+        if not pressed[0] and pressed_time != 0: pressed_time = 0
+        
+        if selected_unit and selected_unit.dead == True: selected_unit = None
+   
+
         handle_mouse_functions(display.camera_pos)
 
-        display.screen.fill("black")
+        display.screen.fill("#121212")
 
-        if ticks >= speed:
+        if ticks >= speed and not GAME_OVER:
             ticks = 0
             cities_by_faction = {}
             for fid, f in factions.items():
@@ -654,10 +789,10 @@ def GameLoop(display):
             combat_positions, building_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
             turn += 1
 
-            game_over = CheckForGameOver(cities)
+            game_over = CheckForGameOver(cities, unit_dict)
             if game_over[0]:
                 print(f"Winning faction: {game_over[1]}")
-                display.run = False
+                GAME_OVER = True
 
 
         # Move units toward their directed pos so they don't move by teleportation
@@ -680,9 +815,25 @@ def GameLoop(display):
                         u.display_pos[1] += y_delta
 
 
+                x, y, size, visible = display.get_unit_actual_pos(u)
+                #Selected
+                if visible and pos[0] >= x and pos[0] <= x + size and pos[1] >= y and pos[1] <= size + y and pressed[0] and time.perf_counter() - pressed_time < 0.1:
+                    selected_unit = u
+                    pressed_time = time.perf_counter() - 100
+                #hovering
+                elif visible and pos[0] >= x and pos[0] <= x + size and pos[1] >= y and pos[1] <= size + y:
+                    u.additional_size = 15
+                else:
+                    u.additional_size = 0
+
+                if selected_unit and u == selected_unit:
+                    u.additional_size = 30
+                   
+
+
         display.draw_map(gmap)
         display.create_animation(combat_positions, 5, "battle_animation")
-        display.create_animation(building_positions, 3, "woodcutter_upgrade")
+        display.create_animation(building_positions, 2, "woodcutter_upgrade")
         display.render_animations()
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
@@ -690,22 +841,8 @@ def GameLoop(display):
 
         # ###########################################3
         # RIGHT_SIDE UI
-        # pygame.draw.rect(display.screen, (100, 100, 100), (winw - 200, 0, 200, winh))
-
-        # display.draw_text(f"TURN {turn}", 1205, 5, "black")
-        # display.draw_text(f"{'Fctn':<5} {'C':>2} {'U':>3} {'M':>4}",
-        #                   1205, 25, "black")
-        # y = 45s
-        # for fid, f in factions.items():
-        #     num_cities = 0
-        #     for c in cities:
-        #         if c.faction_id == fid:
-        #             num_cities += 1
-        #     display.draw_text(f"{fid:<5} {num_cities:>2} {len(unit_dict.by_faction[fid]):>3} {f.money:>4}",
-        #                       1205, y, "black")
-        #     y += 20
-
-        # display.draw_text(f"SPEED {speed}", 1205, 305, "black")
+        display.draw_ui(turn, factions, unit_dict, cities, selected_unit)
+ 
 
 
         pygame.display.flip()

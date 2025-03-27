@@ -17,7 +17,7 @@ class Faction:
         self.commander = None
         self.generals = []
         #self.goal = ["conquer", "cities"]
-        self.goal = ["gather", "wood"]
+        self.goal = ["conquer", "wood"]
 
     def get_next_unit_id(self):
         uid = self.next_unit_id
@@ -46,3 +46,7 @@ class Faction:
         self.generals.append(chosen_general)
 
         return True
+    
+    def reset_generals(self):
+        for general in self.generals:
+            general.targeted_city = None

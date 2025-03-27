@@ -122,8 +122,15 @@ class AI:
 
         if current_faction.goal[0] == "gather":
             for general in current_faction.generals:
-                if not general.targeted_city:
-                    general.choose_target_terrain(gmap, cell_terrain.Terrain.Forest)
+                if not general.targeted_city or gmap.cells[general.targeted_city].terrain != cell_terrain.Terrain.Forest:
+                    terrain_found = general.choose_target_terrain(gmap, cell_terrain.Terrain.Forest)
+
+                    if not terrain_found:
+                        current_faction.goal = ["conquer"]
+
+                        current_faction.reset_generals()
+                        break
+                
 
         # Overview: randomly select a city we own and randomly
         # select a unit type (utype). Create a BuildUnitCommand

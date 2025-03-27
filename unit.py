@@ -66,6 +66,7 @@ class Unit:
         self.dead = False
         self.targeted_city = None
         self.general_following = None
+        self.additional_size = 0
 
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""
@@ -111,6 +112,7 @@ class Unit:
 
     def choose_target_terrain(self, gmap, terrain_type):
         minimum_distance = 9999
+        terrain_found = False
         for key, cell in gmap.cells.items():
             if cell.terrain == terrain_type:
                 distance = abs(key.x - self.pos.x) + abs(key.y - self.pos.y)
@@ -118,5 +120,7 @@ class Unit:
                 if distance < minimum_distance:
                     minimum_distance = distance
                     self.targeted_city = key
-         
+                    terrain_found = True
+
+        return terrain_found
        

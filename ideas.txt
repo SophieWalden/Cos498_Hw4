@@ -50,3 +50,13 @@ Initially to solve the sorting problem I created a sort that randomized command 
 This solved the fairness problem between multiple faction planning
 The problem is that while doing all the planning in one tick is fine for static fields it can make animations look choppy
 To solve this I spread it out 
+
+
+Createa a side tab that by default displays:
+ - Every faction
+   - Faction Resources
+   - Faction Units
+   - Faction Cities
+
+Allow you to click on a unit to be able to view their stats
+ - Outline of chartacter?
