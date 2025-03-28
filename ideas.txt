@@ -60,3 +60,10 @@ Createa a side tab that by default displays:
 
 Allow you to click on a unit to be able to view their stats
  - Outline of chartacter?
+
+Add in two other resources, stone and metal
+Add another tile (Walls? Water?) Impassable. Make sure every map has a way to get to every node, but water can make interesting bottlenecks
+Upgrade pathfinding to pathfind (once?) or figuring out a way around lakes
+make buildings cost resources
+abstract away AI decision making into a separate AI class 
+Let each unit have (randomized or not) sways towards actions, such as gather wood, or conquer city.

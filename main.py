@@ -99,7 +99,11 @@ class Display:
                 image = self.images["forest_tile"]
             elif c.terrain == cell_terrain.Terrain.Woodcutter:
                 image = self.images["woodcutter_tile"]
-                
+            elif c.terrain == cell_terrain.Terrain.Water:
+                image = self.images["water_tile"]
+            elif c.terrain == cell_terrain.Terrain.Stone:
+                image = self.images["stone_tile"]
+
 
             x, y = self.world_to_cord((v.x, v.y))
             self.blit(image, x, y, 50)
@@ -365,7 +369,7 @@ def gen_cities(gmap, faction_ids):
             new_city_pos = vec2.Vec2(
                 random.randrange(gmap.width),
                 random.randrange(gmap.height))
-            if new_city_pos not in city_positions:
+            if new_city_pos not in city_positions and gmap.cells[new_city_pos].terrain != cell_terrain.Terrain.Water:
                 city_positions.append(new_city_pos)
                 break
 
@@ -527,7 +531,9 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
     # Check if new_pos is free.
     combat_pos = None
     move_successful = False
-    if unit_dict.is_pos_free(new_pos):
+    if gmap.cells[new_pos].terrain == cell_terrain.Terrain.Water:
+        pass
+    elif unit_dict.is_pos_free(new_pos):
         old_pos = theunit.pos
         theunit.pos = new_pos
         unit_dict.move_unit(u, old_pos, new_pos)
@@ -724,6 +730,7 @@ def GameLoop(display):
     GAME_OVER = False
     pressed_time = 0
     selected_unit = None
+    desired_scroll = display.zoom
     while display.run:
         dt = display.clock.tick(60)
         ticks += dt
@@ -744,26 +751,25 @@ def GameLoop(display):
                     # Increase if you want a slower game speed.
                     if speed < 4096:
                         speed = speed * 2
-                elif event.key == pygame.K_u:
-                    TILE_Y_OFFSET -= 1
-                elif event.key == pygame.K_i:
-                    TILE_Y_OFFSET += 1
-                elif event.key == pygame.K_o:
-                    TILE_X_OFFSET -= 1
-                elif event.key == pygame.K_p:
-                    TILE_X_OFFSET += 1
             elif event.type == pygame.MOUSEWHEEL:
-
                 scroll_val = min(max(event.y, -3), 3)/6 + 1
-                display.zoom *= scroll_val
-                display.zoom = max(min(display.zoom, 10), 0.1)
+                desired_scroll = max(min(scroll_val * desired_scroll, 10), 0.1)
+                
 
             elif event.type == pygame.VIDEORESIZE:
                 display.width, display.height = event.w, event.h
                 display.screen = pygame.display.set_mode((event.w, event.h),
                                               pygame.RESIZABLE)
 
-        
+
+        if display.zoom != desired_scroll:
+      
+            difference = display.zoom - desired_scroll
+            change = difference * 0.25
+            display.zoom -= change
+
+            display.zoom = max(min(display.zoom, 10), 0.1)
+    
         pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
         if pressed[0] and pressed_time == 0: pressed_time = time.perf_counter()
         if selected_unit and not pressed[0] and time.perf_counter() - pressed_time < 0.1: selected_unit = None

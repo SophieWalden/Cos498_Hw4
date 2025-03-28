@@ -190,8 +190,9 @@ class AI:
 
                 available_moves = []
                 for name, direction in vec2.MOVES.items():
-                    new_pos = (u.pos.x + direction.x, u.pos.y + direction.y)
-                    if new_pos not in current_units_pos:
+                    new_pos = vec2.Vec2(u.pos.x + direction.x, u.pos.y + direction.y)
+                    new_pos.mod(gmap.width, gmap.height)
+                    if (new_pos.x, new_pos.y) not in current_units_pos and gmap.cells[new_pos].terrain != cell_terrain.Terrain.Water:
                         available_moves.append((name, direction))
 
                 if available_moves:
