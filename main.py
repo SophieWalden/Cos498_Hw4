@@ -15,6 +15,7 @@ import cell_terrain
 import math
 from cell import Cell
 import sys
+from collections import defaultdict
 
 # ###################################################################
 # DISPLAY
@@ -65,7 +66,7 @@ class Display:
         self.zoom = 0.6
         self.camera_pos = [-700, 100]
         self.width, self.height = pygame.display.get_window_size()
-        self.queued_animations = []
+        self.queued_animations = defaultdict(lambda: [])
         self.map = None
         # self.animations = {"battle": Animation("battle_animation", self.images)}
 
@@ -92,7 +93,6 @@ class Display:
     def draw_map(self, gmap):
         for v, c in gmap.cell_render_queue:
             image = None
-
        
             if c.terrain == cell_terrain.Terrain.Open:
                 image = self.images["open_tile"]
@@ -108,6 +108,18 @@ class Display:
 
             x, y = self.world_to_cord((v.x, v.y))
             self.blit(image, x, y, 50)
+
+            # Render animation on top of each tile
+            indexes_to_remove = []
+            for i, (pos, animation, animation_speed) in enumerate(self.queued_animations[(v.x, v.y)]):
+                image = animation.get_next_image(animation_speed)
+
+                self.blit(image, pos[0], pos[1], 50)
+                if animation.finished: indexes_to_remove.append(i) 
+
+            for index in indexes_to_remove[::-1]:
+                self.queued_animations[(v.x, v.y)].pop(index)
+         
 
             
 
@@ -165,19 +177,7 @@ class Display:
 
     def create_animation(self, positions, speed, name):
         for position in positions:
-            self.queued_animations.append([self.world_to_cord([position.x, position.y]), Animation(name, self.images), speed])
-
-    def render_animations(self):
-        indexes_to_remove = []
-        for i, (pos, animation, animation_speed) in enumerate(self.queued_animations):
-            image = animation.get_next_image(animation_speed)
-
-            self.blit(image, pos[0], pos[1], 50)
-            if animation.finished: indexes_to_remove.append(i) 
-
-        for index in indexes_to_remove[::-1]:
-            self.queued_animations.pop(index)
-
+            self.queued_animations[(position.x, position.y)].append([self.world_to_cord([position.x, position.y]), Animation(name, self.images), speed])
 
     def load_images(self):
         images = {}
@@ -193,8 +193,9 @@ class Display:
 
         winw, winh = pygame.display.get_window_size()
 
-        self.draw_rect_advanced(MENU_BACKGROUND, 150, 10, 10, 75 + 11 * len(str(turn)), 25, (MENU_OUTLINE, 3))
-        self.draw_text(f"Turn: {turn}", 15, 15, "white")
+        self.screen.blit(pygame.transform.scale(self.images["clock_ui"], (300, 150)), (0, 0))
+        # self.draw_rect_advanced(MENU_BACKGROUND, 150, 10, 10, 75 + 11 * len(str(turn)), 25, (MENU_OUTLINE, 3))
+        self.draw_text(f"{turn:{' '}>18}", 20, 15, (180, 180, 180))
 
         faction_colors = {key: value.color for key, value in factions.items()}
         units_by_faction = {key: len(value) for key, value in units.by_faction.items()}
@@ -207,14 +208,14 @@ class Display:
         if cities_sum > 0:
             cities_normalized = {key: value/cities_sum for key, value in cities_by_faction.items()}
 
-            x = 150
+            x = 315
             for i, (key, value) in enumerate(cities_normalized.items()):
                 color = faction_colors[key]
 
-                self.draw_rect_advanced(self.darken(color, 1.5), 200,x, 10, int(value * (winw / 1.5)), 10, (self.darken(color, 3), 2))
-                x += int(value * (winw / 1.5))
+                self.draw_rect_advanced(self.darken(color, 1.5), 200,x, 10, int(value * (winw / 1.7)), 10, (self.darken(color, 3), 2))
+                x += int(value * (winw / 1.7))
         else:
-            pygame.draw.rect(self.screen, (100, 100, 100), (200, 10, winw // 1.5, 5))
+            pygame.draw.rect(self.screen, (100, 100, 100), (200, 10, winw // 1.7, 5))
 
 
         sidebar_mode = "general"
@@ -845,10 +846,10 @@ def GameLoop(display):
                    
 
 
-        display.draw_map(gmap)
-        display.create_animation(combat_positions, 5, "battle_animation")
+        
+        display.create_animation(combat_positions, 3, "battle_animation")
         display.create_animation(building_positions, 2, "woodcutter_upgrade")
-        display.render_animations()
+        display.draw_map(gmap)
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
 

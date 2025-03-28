@@ -202,8 +202,6 @@ class AI:
                     if key in self.move_cache and random.random() < 0.9: 
                         self.move_queue = self.move_cache[key][:]
                     else:
-
-                        move_queue = []
                         seen_nodes = set([(u.pos.x, u.pos.y)])
                         queue = [[u.pos.x, u.pos.y, []]]
                 
