@@ -756,7 +756,8 @@ def GameLoop(display):
                         speed = speed * 2
 
                 elif event.key == pygame.K_r:
-                    main()
+                    return 
+                    
                 
             elif event.type == pygame.MOUSEWHEEL:
                 scroll_val = min(max(event.y, -3), 3)/6 + 1
@@ -871,6 +872,8 @@ def main():
  
     display = init_display(winw, winh)
     GameLoop(display)
+
+    main()
 
 
 if __name__ == "__main__":
