@@ -31,6 +31,7 @@ class AI:
     # to differentiate between faction behaviors, you are welcome
     # to do so.
     def __init__(self):
+        self.move_cache = {}
         pass
 
 
@@ -156,52 +157,84 @@ class AI:
 
         time_chunks["targeted_city_build"] = time.perf_counter() - time_chunks["assign_general_commander"]     - start_time    
         
+        
+
 
         for u in current_units:
 
             if u.rank == "soldier" and not u.general_following:
                 u.choose_general(current_faction.generals)
 
-            targeted_city = None
-            pos = (u.pos.x, u.pos.y)
-            if not u.general_following and pos in current_cities_pos:
-    
-                rand_dir = random.choice(list(vec2.MOVES.keys()))
-                cmd = MoveUnitCommand(faction_id, u.ID, rand_dir)
+            if u.move_queue:
+                cmd = MoveUnitCommand(faction_id, u.ID, u.move_queue.pop(0))
                 cmds.append(cmd)
-
-            elif u.general_following:
-                targeted_city = u.general_following.targeted_city
-            elif u.targeted_city:
-                targeted_city = u.targeted_city
-            elif u.rank == "commander" and current_cities_pos:
-                targeted_city_pos = min(current_cities_pos, key=lambda pos: (pos[0] - u.pos.x)**2+(pos[1] - u.pos.y)**2)
-                targeted_city = City("_", vec2.Vec2(targeted_city_pos[0], targeted_city_pos[1]), "_", "_")
-            elif len(current_cities_pos) == 0:
-                u.choose_targeted_city(cities)
-                targeted_city = u.targeted_city
-            
-
-            if targeted_city:
-                try:
-                    targeted_pos = targeted_city.pos
-                except Exception:
-                    targeted_pos = targeted_city
-
-                available_moves = []
-                for name, direction in vec2.MOVES.items():
-                    new_pos = vec2.Vec2(u.pos.x + direction.x, u.pos.y + direction.y)
-                    new_pos.mod(gmap.width, gmap.height)
-                    if (new_pos.x, new_pos.y) not in current_units_pos and gmap.cells[new_pos].terrain != cell_terrain.Terrain.Water:
-                        available_moves.append((name, direction))
-
-                if available_moves:
-                    targeted_move = min(available_moves, key=lambda move: ((u.pos.x+move[1].x)-targeted_pos.x)**2+((u.pos.y+move[1].y)-targeted_pos.y)**2 + random.uniform(-1, 1))[0]
-                    cmd = MoveUnitCommand(faction_id, u.ID, targeted_move)
+            else:
+                targeted_city = None
+                pos = (u.pos.x, u.pos.y)
+                if not u.general_following and pos in current_cities_pos:
+        
+                    rand_dir = random.choice(list(vec2.MOVES.keys()))
+                    cmd = MoveUnitCommand(faction_id, u.ID, rand_dir)
                     cmds.append(cmd)
+
+                elif u.general_following:
+                    targeted_city = u.general_following.targeted_city
+                elif u.targeted_city:
+                    targeted_city = u.targeted_city
+                elif u.rank == "commander" and current_cities_pos:
+                    targeted_city_pos = min(current_cities_pos, key=lambda pos: (pos[0] - u.pos.x)**2+(pos[1] - u.pos.y)**2)
+                    targeted_city = targeted_city_pos
+                elif len(current_cities_pos) == 0:
+                    u.choose_targeted_city(cities)
+                    targeted_city = u.targeted_city
+                
+
+                if targeted_city:
+                    try:
+                        targeted_pos = (targeted_city.pos.x, targeted_city.pos.y)
+                    except Exception as e:
+                        try:
+                            targeted_pos = (targeted_city.x, targeted_city.y)
+                        except Exception as e:
+                            targeted_pos = targeted_city
+
+                    key = (u.pos.x, u.pos.y, targeted_pos[0], targeted_pos[1])
+                    if key in self.move_cache and random.random() < 0.9: 
+                        self.move_queue = self.move_cache[key][:]
+                    else:
+
+                        move_queue = []
+                        seen_nodes = set([(u.pos.x, u.pos.y)])
+                        queue = [[u.pos.x, u.pos.y, []]]
+                
+                        while queue:
+                            x, y, path = queue.pop(queue.index(min(queue, key=lambda pos: random.random() * 10 + abs(pos[0] - u.pos.x) + abs(pos[1] - u.pos.y) + abs(pos[0] - targeted_pos[0]) + abs(pos[1] - targeted_pos[1]))))
+
+                        
+                            if x == targeted_pos[0] and y == targeted_pos[1]:
+                                u.move_queue = path
+                                break
+
+                            for name, direction in vec2.MOVES.items():
+                                new_x, new_y = x + direction.x, y + direction.y
+                                new_x %= gmap.width
+                                new_y %= gmap.height
+
+                                if (new_x, new_y) not in seen_nodes and gmap.cells[vec2.Vec2(new_x, new_y)].terrain != cell_terrain.Terrain.Water:
+                                    seen_nodes.add((new_x, new_y))
+                                    queue.append([new_x, new_y, path + [name]])
+                                
+                        self.move_cache[key] = u.move_queue[:]
+
 
             if current_faction.goal[0] == "gather" and gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest:
                 cmds.append(BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "woodcutter"))
+
+            
+
+            
+
+            
                 
 
         time_chunks["units_moved"] = time.perf_counter() - time_chunks["targeted_city_build"]        - start_time

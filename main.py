@@ -744,13 +744,17 @@ def GameLoop(display):
                 elif event.key == pygame.K_LEFT:
 
                     # Lower if you want a faster game speed.
-                    if speed > 1:
+                    if speed > 64:
                         speed = speed // 2
                 elif event.key == pygame.K_RIGHT:
 
                     # Increase if you want a slower game speed.
                     if speed < 4096:
                         speed = speed * 2
+
+                elif event.key == pygame.K_r:
+                    main()
+                
             elif event.type == pygame.MOUSEWHEEL:
                 scroll_val = min(max(event.y, -3), 3)/6 + 1
                 desired_scroll = max(min(scroll_val * desired_scroll, 10), 0.1)
