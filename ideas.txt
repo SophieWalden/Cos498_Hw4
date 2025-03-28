@@ -67,3 +67,5 @@ Upgrade pathfinding to pathfind (once?) or figuring out a way around lakes
 make buildings cost resources
 abstract away AI decision making into a separate AI class 
 Let each unit have (randomized or not) sways towards actions, such as gather wood, or conquer city.
+
+Make camera_pos and default scroll scale for window sizes so no matter the size the display looks good on reset

@@ -14,6 +14,7 @@ import os
 import cell_terrain
 import math
 from cell import Cell
+import sys
 
 # ###################################################################
 # DISPLAY
@@ -347,7 +348,7 @@ def gen_factions(gmap):
 
     factions = {}
 
-    while len(factions) != 6:
+    while len(factions) != 3:
         name, color = POSSIBLE_FACTIONS[len(factions)]
         factions[name] = faction.Faction(
             name, params.STARTING_FACTION_MONEY,
@@ -714,7 +715,7 @@ def GameLoop(display):
     # with two other things.
     # - The window size below in main().
     # - The map_cell_size given in the Display class above.
-    gmap = gen_game_map(60, 60)
+    gmap = gen_game_map(50, 50)
     
     factions = gen_factions(gmap)
     cities = gen_cities(gmap, list(factions.keys()))
@@ -738,9 +739,11 @@ def GameLoop(display):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 display.run = False
+                sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_q:
                     display.run = False
+                    sys.exit()
                 elif event.key == pygame.K_LEFT:
 
                     # Lower if you want a faster game speed.
@@ -860,7 +863,13 @@ def GameLoop(display):
 
 def main():
     random.seed(None)
-    display = init_display(1400, 800)
+
+    try:
+        winw, winh = pygame.display.get_window_size()
+    except Exception:
+        winw, winh = 1400, 800
+ 
+    display = init_display(winw, winh)
     GameLoop(display)
 
 

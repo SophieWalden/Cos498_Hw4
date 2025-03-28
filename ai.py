@@ -227,7 +227,7 @@ class AI:
                         self.move_cache[key] = u.move_queue[:]
 
 
-            if current_faction.goal[0] == "gather" and gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest:
+            if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest:
                 cmds.append(BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "woodcutter"))
 
             
