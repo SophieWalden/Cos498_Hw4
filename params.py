@@ -37,13 +37,25 @@ def get_random_terrain(roll):
 # FACTION STUFF
 #
 # How much money does a city generate per turn?
-CITY_INCOME = 10
+CITY_INCOME = 3
 
 # How many cities does each faction start with?
 CITIES_PER_FACTION = 6
 
 # How much money does a faction start with?
 STARTING_FACTION_MONEY = 1000
+
+# How much money do structures cost?
+STRUCTURE_COST = {
+    "woodcutter": {"gold": 150},
+    "miner": {"gold": 30, "wood": 10}
+}
+
+# What do structures give every turn?
+STRUCTURE_OUTPUT = {
+    "woodcutter": {"wood": 1},
+    "miner": {"stone": 1}
+}
 
 # The rest of this is used to give the cities random
 # ID (aka names). These random names don't appear visibly

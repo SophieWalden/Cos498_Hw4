@@ -260,10 +260,10 @@ class AI:
 
 
             if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest:
-                unit_commands[u.ID] = BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "woodcutter")
+                unit_commands[u.ID] = BuildStructureCommand(faction_id, current_faction, (u.pos.x, u.pos.y), "woodcutter")
 
             if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Stone:
-                unit_commands[u.ID] = BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "miner")
+                unit_commands[u.ID] = BuildStructureCommand(faction_id, current_faction, (u.pos.x, u.pos.y), "miner")
 
         
         # Units can only choose one command per round

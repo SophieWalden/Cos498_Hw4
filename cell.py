@@ -32,8 +32,9 @@ DEFENSE_DICT = {
 }
 
 class Cell:
-    def __init__(self, terrain):
+    def __init__(self, terrain, owned_by=None):
         self.terrain = terrain
+        self.owned_by = owned_by
     
     def get_attack_mod(self):
         return ATTACK_DICT[self.terrain]

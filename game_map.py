@@ -10,7 +10,7 @@ import cell_terrain
 
 CELL_TRANSLATION_MAP = {0: cell_terrain.Terrain.Open, 1: cell_terrain.Terrain.Forest, 2: cell_terrain.Terrain.Water, 3: cell_terrain.Terrain.Stone}
 FOREST_THRESHOLD = 0.54
-STONE_THRESHOLD = 0.52 # 0.58
+STONE_THRESHOLD = 0.58
 WATER_THREDSHOLD = 0.47
 
 class GameMap:

@@ -10,14 +10,14 @@ import unit, random
 class Faction:
     def __init__(self, ID, money, ai, color, starting_unit_id):
         self.ID = ID
-        self.money = money
         self.ai = ai
         self.next_unit_id = starting_unit_id
         self.color = color
         self.commander = None
         self.generals = []
-        #self.goal = ["conquer", "cities"]
+        self.materials = {"gold": money, "wood": 0, "stone": 0}
         self.goal = ["conquer", "wood"]
+        self.structures = []
 
     def get_next_unit_id(self):
         uid = self.next_unit_id
@@ -25,7 +25,16 @@ class Faction:
         return uid
 
     def can_build_unit(self, cost):
-        return cost <= self.money
+        return cost <= self.materials["gold"]
+    
+    def can_build_structure(self, cost):
+        can_build = True
+
+        for key, val in cost.items():
+            if self.materials[key] < val:
+                can_build = False
+        
+        return can_build
         
     # ################################################################
     def run_ai(self, factions, cities, units, gmap, move_cache):

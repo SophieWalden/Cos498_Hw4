@@ -16,6 +16,7 @@ import math
 from cell import Cell
 import sys
 from collections import defaultdict
+from structure import Structure
 
 # ###################################################################
 # DISPLAY
@@ -59,6 +60,7 @@ TEXT_COLOR = "white"
 TILE_MAP = {cell_terrain.Terrain.Open: "open_tile", cell_terrain.Terrain.Forest: "forest_tile",
                     cell_terrain.Terrain.Woodcutter: "woodcutter_tile", cell_terrain.Terrain.Water: "water_tile",
                     cell_terrain.Terrain.Stone: "stone_tile", cell_terrain.Terrain.Miner: "miner_tile"}
+STRUCTURE_LIST = [cell_terrain.Terrain.Miner, cell_terrain.Terrain.Woodcutter]
 class Display:
     def __init__(self, screen, clock):
         self.screen = screen
@@ -118,6 +120,9 @@ class Display:
 
             for index in indexes_to_remove[::-1]:
                 self.queued_animations[(v.x, v.y)].pop(index)
+
+            if c.owned_by:
+                self.outline_tile(v.x, v.y, self.darken(c.owned_by.color, 2), "structure")
          
 
             
@@ -125,7 +130,7 @@ class Display:
     def draw_cities(self, cities, factions):
         for c in cities:
             f = factions[c.faction_id]
-            self.outline_tile(c.pos.x, c.pos.y, f.color)
+            self.outline_tile(c.pos.x, c.pos.y, f.color, "tile")
 
     def draw_units(self, unit_dict, factions):
         for fid, ulist in unit_dict.by_faction.items():
@@ -154,9 +159,11 @@ class Display:
 
         return (x, y)
 
-    def outline_tile(self, x, y, color):
+    def outline_tile(self, x, y, color, type):
+        image_name = {"tile": "tile_outline", "structure": "structure_outline"}[type]
+
         x, y = self.world_to_cord((x, y))
-        outline = self.images["tile_outline"].copy()
+        outline = self.images[image_name].copy()
         
         outline.fill(color, special_flags = pygame.BLEND_MULT)
         self.blit(outline, x, y, 50)
@@ -251,10 +258,11 @@ class Display:
 
                 y += 25
 
-                surface, rect = self.font.render(f"Gold: {faction.money}", TEXT_COLOR)
-                menu_surface.blit(surface, (10, y))
+                for key, val in faction.materials.items():
+                    surface, rect = self.font.render(f"{key}: {val}", TEXT_COLOR)
+                    menu_surface.blit(surface, (10, y))
 
-                y += 25
+                    y += 25
 
         elif sidebar_mode == "unit":
             menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
@@ -270,6 +278,11 @@ class Display:
             surface, rect = self.font.render(f"Rank: {unit_selected.rank}", TEXT_COLOR)
             menu_surface.blit(surface, (10, y))
             y += 25
+
+            if unit_selected.targeted_city:
+                surface, rect = self.font.render(f"Targeting: {unit_selected.targeted_city.pos.x} {unit_selected.targeted_city.pos.y}", TEXT_COLOR)
+                menu_surface.blit(surface, (10, y))
+                y += 25
 
         self.screen.blit(menu_surface, ((winw - 200, 10)))
 
@@ -413,8 +426,12 @@ def FactionPreTurn(cities, faction):
     for c in cities:
         if c.faction_id == faction.ID:
             income = c.generate_income()
-            faction.money += income
-    
+            faction.materials['gold'] += income
+            
+    for structure in faction.structures:
+        for key, val in structure.generate_material().items():
+            faction.materials[key] += val
+
     # #####################################################
     # CITY DATA
     for c in cities:
@@ -492,12 +509,24 @@ def RunBuildStructureCommand(cmd, gmap):
 
     position = vec2.Vec2(cmd.pos[0], cmd.pos[1])
 
-    if cmd.utype == "woodcutter" and gmap.cells[position].terrain == cell_terrain.Terrain.Forest:
-        gmap.cells[position] = Cell(cell_terrain.Terrain.Woodcutter)
+    if cmd.utype == "woodcutter" and cmd.faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]) and gmap.cells[position].terrain == cell_terrain.Terrain.Forest:
+        gmap.cells[position] = Cell(cell_terrain.Terrain.Woodcutter, cmd.faction)
         building_pos.append((position, cmd.utype))
-    if cmd.utype == "miner" and gmap.cells[position].terrain == cell_terrain.Terrain.Stone:
-        gmap.cells[position] = Cell(cell_terrain.Terrain.Miner)
+
+        for key, val in params.STRUCTURE_COST["woodcutter"].items():
+            cmd.faction.materials[key] -= val
+
+        cmd.faction.structures.append(Structure(vec2.Vec2(cmd.pos[0], cmd.pos[1]), "woodcutter"))
+
+    if cmd.utype == "miner" and cmd.faction.can_build_structure(params.STRUCTURE_COST["miner"]) and gmap.cells[position].terrain == cell_terrain.Terrain.Stone:
+        gmap.cells[position] = Cell(cell_terrain.Terrain.Miner, cmd.faction)
         building_pos.append((position, cmd.utype))
+
+        
+        for key, val in params.STRUCTURE_COST["miner"].items():
+            cmd.faction.materials[key] -= val
+
+        cmd.faction.structures.append(Structure(vec2.Vec2(cmd.pos[0], cmd.pos[1]), "miner"))
     
     gmap.rerender()
 
@@ -576,10 +605,20 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
     if move_successful:
         for c in cities:
             if new_pos == c.pos:
-                c.faction_id = u.faction_id
+                c.faction_id = theunit.faction_id
                 break
 
-    if move_successful:
+        for fid, faction in factions.items():
+            indexes_to_remove = []
+            for i, structure in enumerate(faction.structures):
+                if structure.pos == new_pos and fid != theunit.faction_id:
+                    indexes_to_remove.append(i)
+                    factions[theunit.faction_id].structures.append(structure)
+                    gmap.cells[new_pos].owned_by = factions[theunit.faction_id]
+
+            for index in indexes_to_remove[::-1]:
+                faction.structures.pop(index)
+
         theunit.moving = True
 
     return combat_pos
@@ -610,7 +649,7 @@ def RunBuildCommand(cmd, factions, unit_dict, cities, gmap):
                                         0)
                 unit_dict.add_unit(new_unit)
 
-                f.money -= cost
+                f.materials["gold"] -= cost
 
 # RunCombat:
 # Called by the MoveUnitCommand if a unit tries to move into a cell
@@ -755,7 +794,7 @@ def GameLoop(display):
                 elif event.key == pygame.K_LEFT:
 
                     # Lower if you want a faster game speed.
-                    if speed > 64:
+                    if speed > 1:
                         speed = speed // 2
                 elif event.key == pygame.K_RIGHT:
 
@@ -766,6 +805,14 @@ def GameLoop(display):
                 elif event.key == pygame.K_r:
                     return 
                     
+                # elif event.key == pygame.K_u:
+                #     TILE_X_OFFSET -= 1
+                # elif event.key == pygame.K_i:
+                #     TILE_X_OFFSET += 1
+                # elif event.key == pygame.K_o:
+                #     TILE_Y_OFFSET -= 1
+                # elif event.key == pygame.K_p:
+                #     TILE_Y_OFFSET += 1
                 
             elif event.type == pygame.MOUSEWHEEL:
                 scroll_val = min(max(event.y, -3), 3)/6 + 1
