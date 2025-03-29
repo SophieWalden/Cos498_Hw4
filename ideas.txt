@@ -69,3 +69,4 @@ abstract away AI decision making into a separate AI class
 Let each unit have (randomized or not) sways towards actions, such as gather wood, or conquer city.
 
 Make camera_pos and default scroll scale for window sizes so no matter the size the display looks good on reset
+Create custom cursors for when dragging

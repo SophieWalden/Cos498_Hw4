@@ -70,13 +70,13 @@ class Display:
         self.font = None
         self.map_cell_size = 20
         self.images = self.load_images()
-        self.zoom = 0.6
-        self.camera_pos = [-700, 100]
         self.width, self.height = pygame.display.get_window_size()
         self.queued_animations = defaultdict(lambda: [])
         self.map = None
         self.debug_id = 0
-        # self.animations = {"battle": Animation("battle_animation", self.images)}
+        self.ticks = 0
+        self.zoom = 0.6 * (self.width / 1200)
+        self.camera_pos = [-800, 100]
 
     # fmt: off
     def draw_gobj(self, gobj):
@@ -98,14 +98,29 @@ class Display:
             p2,
             width)
 
+    def get_tile_image(self, terrain, v, gmap):
+        """
+        
+            Gets the terrain image based on a couple conditions
+        
+        """
+        
+        pos_to_left = vec2.Vec2(v.x - 1, v.y)
+        water_to_left = v.x == 0 or gmap.cells[pos_to_left].terrain == cell_terrain.Terrain.Water
+
+        if terrain == cell_terrain.Terrain.Water and not water_to_left:
+            return self.images["water_shaded_top_tile"]
+
+        return self.images[TILE_MAP[terrain]]
+
     def draw_map(self, gmap):
         for v, c in gmap.cell_render_queue:
             image = None
        
             if c.terrain not in TILE_MAP: return
             
-            image = self.images[TILE_MAP[c.terrain]]
-            
+            image = self.get_tile_image(c.terrain, v, gmap)
+            self.images[TILE_MAP[c.terrain]]
          
             x, y = self.world_to_cord((v.x, v.y))
             self.blit(image, x, y, 50)
@@ -744,12 +759,13 @@ def CheckForGameOver(cities, units):
 # for different reasons.
 # ###########################################################
 
-def handle_mouse_functions(offset):
+def handle_mouse_functions(offset, zoom):
     rel, pressed = pygame.mouse.get_rel(), pygame.mouse.get_pressed()
+   
 
     if pressed[0]:
-        offset[0] += -rel[0] * 1.6
-        offset[1] += -rel[1] * 1.5
+        offset[0] += -rel[0] * (1 / zoom)
+        offset[1] += -rel[1] * (1 / zoom)
 
 import time
 
@@ -780,6 +796,7 @@ def GameLoop(display):
     GAME_OVER = False
     pressed_time = 0
     selected_unit = None
+    dragging, hover = False, False
     desired_scroll = display.zoom
     while display.run:
 
@@ -841,7 +858,7 @@ def GameLoop(display):
         if selected_unit and selected_unit.dead == True: selected_unit = None
    
 
-        handle_mouse_functions(display.camera_pos)
+        handle_mouse_functions(display.camera_pos, display.zoom)
 
         display.screen.fill("#121212")
 
@@ -865,6 +882,7 @@ def GameLoop(display):
 
 
         # Move units toward their directed pos so they don't move by teleportation
+        hover = False
         for fid, ulist in unit_dict.by_faction.items():
             for u in ulist:
 
@@ -891,15 +909,20 @@ def GameLoop(display):
                     pressed_time = time.perf_counter() - 100
                 #hovering
                 elif visible and pos[0] >= x and pos[0] <= x + size and pos[1] >= y and pos[1] <= size + y:
+                    hover = True
+                    pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
                     u.additional_size = 15
                 else:
                     u.additional_size = 0
 
                 if selected_unit and u == selected_unit:
                     u.additional_size = 30
-                   
 
-
+        
+        if hover:
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
+        else:
+            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
         
         display.create_animation(combat_positions, 1.5, "battle_animation")
         display.create_animation([item[0] for item in building_positions if item[1] == "woodcutter"], 2, "woodcutter_upgrade")
@@ -919,20 +942,19 @@ def GameLoop(display):
         pygame.display.flip()
         dt = display.clock.tick(60)
         ticks += dt
+        display.ticks += dt
 
 
-def main():
+def main(display=None):
     random.seed(None)
+    winw, winh = 1400, 800
 
-    try:
-        winw, winh = pygame.display.get_window_size()
-    except Exception:
-        winw, winh = 1400, 800
- 
-    display = init_display(winw, winh)
+    if not display:
+        display = init_display(winw, winh)
+
     GameLoop(display)
 
-    main()
+    main(display)
 
 
 if __name__ == "__main__":
