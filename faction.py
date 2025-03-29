@@ -28,8 +28,8 @@ class Faction:
         return cost <= self.money
         
     # ################################################################
-    def run_ai(self, factions, cities, units, gmap):
-        return self.ai.run_ai(self.ID, factions, cities, units, gmap)
+    def run_ai(self, factions, cities, units, gmap, move_cache):
+        return self.ai.run_ai(self.ID, factions, cities, units, gmap, move_cache)
 
     def choose_commander(self, units):
         if not units: return None

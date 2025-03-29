@@ -68,7 +68,7 @@ class Unit:
         self.general_following = None
         self.additional_size = 0
 
-        self.move_queue = []
+        self.move_queue = {}
 
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""

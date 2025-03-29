@@ -31,7 +31,7 @@ class AI:
     # to differentiate between faction behaviors, you are welcome
     # to do so.
     def __init__(self):
-        self.move_cache = {}
+        self.cache_hit, self.cache_miss = 0, 0
         pass
 
 
@@ -68,7 +68,7 @@ class AI:
     # the time to create additional Command subclasses and properly
     # implement them in the engine (main.py).
     
-    def run_ai(self, faction_id, factions, cities, units, gmap):
+    def run_ai(self, faction_id, factions, cities, units, gmap, move_cache):
 
         # A list to hold our commands. This gets returned by
         # the function.
@@ -121,6 +121,8 @@ class AI:
                 elif (general.targeted_city.pos.x, general.targeted_city.pos.y) in current_cities_pos:
                     general.choose_targeted_city(cities)
 
+                
+
         if current_faction.goal[0] == "gather":
             for general in current_faction.generals:
                 if not general.targeted_city or gmap.cells[general.targeted_city].terrain != cell_terrain.Terrain.Forest:
@@ -159,22 +161,27 @@ class AI:
         
         
 
-
+        unit_commands = {}
         for u in current_units:
 
             if u.rank == "soldier" and not u.general_following:
                 u.choose_general(current_faction.generals)
 
-            if u.move_queue:
-                cmd = MoveUnitCommand(faction_id, u.ID, u.move_queue.pop(0))
-                cmds.append(cmd)
-            else:
+            if "end_pos" in u.move_queue and not (u.pos.x == u.move_queue["end_pos"][0] and u.pos.y == u.move_queue["end_pos"][1]) and (u.general_following and u.general_following.dead == False and u.general_following.targeted_city and u.general_following.targeted_city.pos.x == u.move_queue["end_pos"][0] and u.general_following.targeted_city.pos.y == u.move_queue["end_pos"][1]):
+                pos = (u.pos.x, u.pos.y)
+                if pos not in u.move_queue:
+                    u.move_queue = {}
+                else:
+                    move = u.move_queue[pos]
+                    unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, move)
+            
+            elif random.random() < 0.5: # Stopping every unit from path planning on the same frame
                 targeted_city = None
                 pos = (u.pos.x, u.pos.y)
                 if not u.general_following and pos in current_cities_pos:
         
                     rand_dir = random.choice(list(vec2.MOVES.keys()))
-                    cmd = MoveUnitCommand(faction_id, u.ID, rand_dir)
+                    unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, rand_dir)
                     cmds.append(cmd)
 
                 elif u.general_following:
@@ -199,15 +206,23 @@ class AI:
                             targeted_pos = targeted_city
 
                     key = (u.pos.x, u.pos.y, targeted_pos[0], targeted_pos[1])
-                    if key in self.move_cache and random.random() < 0.9: 
-                        self.move_queue = self.move_cache[key][:]
+                    if key in move_cache and random.random() < 0.9: 
+                        self.cache_hit += 1
+                        u.move_queue = move_cache[key].copy()
                     else:
+                        self.cache_miss += 1
                         seen_nodes = set([(u.pos.x, u.pos.y)])
-                        queue = [[u.pos.x, u.pos.y, []]]
+                        queue = [[u.pos.x, u.pos.y, {"end_pos": targeted_pos}]]
                 
                         while queue:
                             x, y, path = queue.pop(queue.index(min(queue, key=lambda pos: random.random() * 10 + abs(pos[0] - u.pos.x) + abs(pos[1] - u.pos.y) + abs(pos[0] - targeted_pos[0]) + abs(pos[1] - targeted_pos[1]))))
 
+                            if (x, y, targeted_pos[0], targeted_pos[1]) in u.move_queue:
+                                additional_moves = u.move_queue[(x, y, targeted_pos[0], targeted_pos[1])]
+                                for key, val in additional_moves.items():
+                                    path[key] = val
+                                u.move_queue = path
+                                break
                         
                             if x == targeted_pos[0] and y == targeted_pos[1]:
                                 u.move_queue = path
@@ -220,17 +235,40 @@ class AI:
 
                                 if (new_x, new_y) not in seen_nodes and gmap.cells[vec2.Vec2(new_x, new_y)].terrain != cell_terrain.Terrain.Water:
                                     seen_nodes.add((new_x, new_y))
-                                    queue.append([new_x, new_y, path + [name]])
+                                    
+                                    new_path = path.copy()
+                                    new_path[(x, y)] = name
+                                    queue.append([new_x, new_y, new_path])
                                 
-                        self.move_cache[key] = u.move_queue[:]
+                        move_cache[key] = u.move_queue.copy()
+                        
+                        # To speed up computation every point thats pathing to the same point on the path can follow the same path
+                        pos = [u.pos.x, u.pos.y]
+                        while pos[0] != targeted_pos[0] and pos[1] != targeted_pos[1]:
+                            if (pos[0], pos[1]) not in u.move_queue: break
+                            next_move = u.move_queue[(pos[0], pos[1])]
+                            move = {"W": [-1, 0], "E": [1, 0], "N": [0, -1], "S": [0, 1]}[next_move]
+                            new_x, new_y = pos[0] + move[0], pos[1] + move[1]
+                            new_x %= gmap.width
+                            new_y %= gmap.height
+
+                            pos = [new_x, new_y]
+
+                            new_cache_key = (new_x, new_y, targeted_pos[0], targeted_pos[1]) 
+                            move_cache[new_cache_key] = u.move_queue.copy()
+
 
 
             if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest:
-                cmds.append(BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "woodcutter"))
+                unit_commands[u.ID] = BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "woodcutter")
 
-            
+            if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Stone:
+                unit_commands[u.ID] = BuildStructureCommand(faction_id, (u.pos.x, u.pos.y), "miner")
 
-            
+        
+        # Units can only choose one command per round
+        for uid, cmd in unit_commands.items():
+            cmds.append(cmd)
 
             
                 
@@ -242,4 +280,4 @@ class AI:
         #     print(f"{key}: {val:f}")
 
         # return all the command objects.
-        return cmds
+        return cmds, move_cache

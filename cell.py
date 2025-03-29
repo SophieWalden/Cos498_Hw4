@@ -16,17 +16,19 @@ import cell_terrain
 ATTACK_DICT = {
     cell_terrain.Terrain.Open: 2,
     cell_terrain.Terrain.Forest: 0,
-    cell_terrain.Terrain.Woodcutter: 0,
+    cell_terrain.Terrain.Woodcutter: 1,
     cell_terrain.Terrain.Water: -20,
-    cell_terrain.Terrain.Stone: -2
+    cell_terrain.Terrain.Stone: -2,
+    cell_terrain.Terrain.Miner: -4
 }
 
 DEFENSE_DICT = {
     cell_terrain.Terrain.Open: 0,
-    cell_terrain.Terrain.Forest: 2,
+    cell_terrain.Terrain.Forest: 1,
     cell_terrain.Terrain.Woodcutter: 2,
     cell_terrain.Terrain.Water: -20,
-    cell_terrain.Terrain.Stone: 5
+    cell_terrain.Terrain.Stone: 5,
+    cell_terrain.Terrain.Miner: 3
 }
 
 class Cell:

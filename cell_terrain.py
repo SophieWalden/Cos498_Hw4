@@ -12,3 +12,4 @@ class Terrain(enum.Enum):
     Woodcutter = 2
     Water = 3
     Stone = 4
+    Miner = 5

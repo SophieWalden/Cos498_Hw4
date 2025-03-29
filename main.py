@@ -29,10 +29,12 @@ TILE_Y_OFFSET = 12
 IMAGE_SIZE = 50
 
 class Animation:
-    def __init__(self, name, images, ticks_between_frames=10):
+    def __init__(self, name, images, id=-1, ticks_between_frames=10):
         self.name, self.images, self.ticks_between_frames = name, self.load_animation(name, images), ticks_between_frames
         self.index, self.ticks = 0, 0
         self.finished = False
+        self.id = id
+        self.time_since_last_render = time.perf_counter()
 
     def load_animation(self, name, images):
         animation = []
@@ -40,7 +42,7 @@ class Animation:
             if key.startswith(name):
                 animation.append((key, value))
         
-        animation.sort()
+        animation.sort(key = lambda item: int(item[0][len(name):]))
         return [item[1] for item in animation]
     
     def get_next_image(self, speed):
@@ -54,6 +56,9 @@ class Animation:
 MENU_BACKGROUND = (50, 57, 61)
 MENU_OUTLINE = "#464646"
 TEXT_COLOR = "white"
+TILE_MAP = {cell_terrain.Terrain.Open: "open_tile", cell_terrain.Terrain.Forest: "forest_tile",
+                    cell_terrain.Terrain.Woodcutter: "woodcutter_tile", cell_terrain.Terrain.Water: "water_tile",
+                    cell_terrain.Terrain.Stone: "stone_tile", cell_terrain.Terrain.Miner: "miner_tile"}
 class Display:
     def __init__(self, screen, clock):
         self.screen = screen
@@ -68,6 +73,7 @@ class Display:
         self.width, self.height = pygame.display.get_window_size()
         self.queued_animations = defaultdict(lambda: [])
         self.map = None
+        self.debug_id = 0
         # self.animations = {"battle": Animation("battle_animation", self.images)}
 
     # fmt: off
@@ -94,18 +100,11 @@ class Display:
         for v, c in gmap.cell_render_queue:
             image = None
        
-            if c.terrain == cell_terrain.Terrain.Open:
-                image = self.images["open_tile"]
-            elif c.terrain == cell_terrain.Terrain.Forest: 
-                image = self.images["forest_tile"]
-            elif c.terrain == cell_terrain.Terrain.Woodcutter:
-                image = self.images["woodcutter_tile"]
-            elif c.terrain == cell_terrain.Terrain.Water:
-                image = self.images["water_tile"]
-            elif c.terrain == cell_terrain.Terrain.Stone:
-                image = self.images["stone_tile"]
-
-
+            if c.terrain not in TILE_MAP: return
+            
+            image = self.images[TILE_MAP[c.terrain]]
+            
+         
             x, y = self.world_to_cord((v.x, v.y))
             self.blit(image, x, y, 50)
 
@@ -177,7 +176,12 @@ class Display:
 
     def create_animation(self, positions, speed, name):
         for position in positions:
-            self.queued_animations[(position.x, position.y)].append([self.world_to_cord([position.x, position.y]), Animation(name, self.images), speed])
+            ID = None
+            if name == "miner_upgrade":
+                ID = self.debug_id
+                self.debug_id += 1
+
+            self.queued_animations[(position.x, position.y)].append([self.world_to_cord([position.x, position.y]), Animation(name, self.images, id=ID), speed])
 
     def load_images(self):
         images = {}
@@ -422,13 +426,14 @@ def FactionPreTurn(cities, faction):
 # Turn:
 # The actual turn taking function. Calls each faction's ai
 # Gathers all the commands in a giant list and returns it.
-def Turn(factions, gmap, cities_by_faction, units_by_faction):
+def Turn(factions, gmap, cities_by_faction, units_by_faction, move_cache):
     commands = []
 
     for fid, f in factions.items():
-        commands.extend(f.run_ai(factions, cities_by_faction, units_by_faction, gmap))
+        cmds, move_cache = f.run_ai(factions, cities_by_faction, units_by_faction, gmap, move_cache) 
+        commands.extend(cmds)
 
-    return commands
+    return commands, move_cache
 
 def shuffle(commands):
     """
@@ -487,9 +492,12 @@ def RunBuildStructureCommand(cmd, gmap):
 
     position = vec2.Vec2(cmd.pos[0], cmd.pos[1])
 
-    if cmd.utype == "woodcutter":
+    if cmd.utype == "woodcutter" and gmap.cells[position].terrain == cell_terrain.Terrain.Forest:
         gmap.cells[position] = Cell(cell_terrain.Terrain.Woodcutter)
-        building_pos.append(position)
+        building_pos.append((position, cmd.utype))
+    if cmd.utype == "miner" and gmap.cells[position].terrain == cell_terrain.Terrain.Stone:
+        gmap.cells[position] = Cell(cell_terrain.Terrain.Miner)
+        building_pos.append((position, cmd.utype))
     
     gmap.rerender()
 
@@ -717,6 +725,7 @@ def GameLoop(display):
     # - The window size below in main().
     # - The map_cell_size given in the Display class above.
     gmap = gen_game_map(50, 50)
+    move_cache = {}
     
     factions = gen_factions(gmap)
     cities = gen_cities(gmap, list(factions.keys()))
@@ -734,8 +743,6 @@ def GameLoop(display):
     selected_unit = None
     desired_scroll = display.zoom
     while display.run:
-        dt = display.clock.tick(60)
-        ticks += dt
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -798,9 +805,9 @@ def GameLoop(display):
                 faction_cities = FactionPreTurn(cities, f)
                 cities_by_faction[fid] = faction_cities
 
-            commands = Turn(factions, gmap,
+            commands, move_cache = Turn(factions, gmap,
                             cities_by_faction,
-                            unit_dict.by_faction)
+                            unit_dict.by_faction, move_cache)
             combat_positions, building_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
             turn += 1
 
@@ -847,12 +854,14 @@ def GameLoop(display):
 
 
         
-        display.create_animation(combat_positions, 3, "battle_animation")
-        display.create_animation(building_positions, 2, "woodcutter_upgrade")
+        display.create_animation(combat_positions, 1.5, "battle_animation")
+        display.create_animation([item[0] for item in building_positions if item[1] == "woodcutter"], 2, "woodcutter_upgrade")
+        display.create_animation([item[0] for item in building_positions if item[1] == "miner"], 2, "miner_upgrade")
         display.draw_map(gmap)
         display.draw_cities(cities, factions)
         display.draw_units(unit_dict, factions)
 
+        building_positions, combat_positions = [], []
 
         # ###########################################3
         # RIGHT_SIDE UI
@@ -861,6 +870,8 @@ def GameLoop(display):
 
 
         pygame.display.flip()
+        dt = display.clock.tick(60)
+        ticks += dt
 
 
 def main():
