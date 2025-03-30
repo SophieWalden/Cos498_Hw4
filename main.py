@@ -219,9 +219,8 @@ class Display:
 
         winw, winh = pygame.display.get_window_size()
 
-        self.screen.blit(pygame.transform.scale(self.images["clock_ui"], (300, 150)), (0, 0))
-        # self.draw_rect_advanced(MENU_BACKGROUND, 150, 10, 10, 75 + 11 * len(str(turn)), 25, (MENU_OUTLINE, 3))
-        self.draw_text(f"{turn:{' '}>18}", 20, 15, (180, 180, 180))
+        self.screen.blit(pygame.transform.scale(self.images["turn_counter"], (200, 50)), (20, 10))
+        self.draw_text(f"{turn:{' '}>18}", 10, 30, (180, 180, 180))
 
         faction_colors = {key: value.color for key, value in factions.items()}
         units_by_faction = {key: len(value) for key, value in units.by_faction.items()}
