@@ -8,7 +8,7 @@ import unit, random
 
 
 class Faction:
-    def __init__(self, ID, money, ai, color, starting_unit_id):
+    def __init__(self, ID, money, ai, color, starting_unit_id, name):
         self.ID = ID
         self.ai = ai
         self.next_unit_id = starting_unit_id
@@ -18,6 +18,7 @@ class Faction:
         self.materials = {"gold": money, "wood": 0, "stone": 0}
         self.goal = ["conquer", "wood"]
         self.structures = []
+        self.name = name
 
     def get_next_unit_id(self):
         uid = self.next_unit_id

@@ -70,3 +70,11 @@ Let each unit have (randomized or not) sways towards actions, such as gather woo
 
 Make camera_pos and default scroll scale for window sizes so no matter the size the display looks good on reset
 Create custom cursors for when dragging
+
+# Inspector Panel
+What does it need?
+  - Each faction, unit, city, materials
+  - Unit Selection Panel
+   - All unit information.
+
+Pretty muhc just needs to be a stylzed panel on the right side that changes betwene the two modes

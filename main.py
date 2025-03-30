@@ -54,8 +54,8 @@ class Animation:
 
         return image
 
-MENU_BACKGROUND = (50, 57, 61)
-MENU_OUTLINE = "#464646"
+MENU_BACKGROUND = "#1a1f2e"
+MENU_OUTLINE = "#2a3b4c"
 TEXT_COLOR = "white"
 TILE_MAP = {cell_terrain.Terrain.Open: "open_tile", cell_terrain.Terrain.Forest: "forest_tile",
                     cell_terrain.Terrain.Woodcutter: "woodcutter_tile", cell_terrain.Terrain.Water: "water_tile",
@@ -77,6 +77,7 @@ class Display:
         self.ticks = 0
         self.zoom = 0.6 * (self.width / 1200)
         self.camera_pos = [-800, 100]
+        self.menu_scroll = 0
 
     # fmt: off
     def draw_gobj(self, gobj):
@@ -163,7 +164,7 @@ class Display:
                 elif u.rank == "commander": size = 70
                 size += u.additional_size
 
-                self.blit(image, x - ((size - 30) // 2), y - ((size - 30) // 2), size)
+                self.blit(image, x - ((size - 30) // 2), y - ((size - 30)), size)
 
 
 
@@ -220,7 +221,7 @@ class Display:
         winw, winh = pygame.display.get_window_size()
 
         self.screen.blit(pygame.transform.scale(self.images["turn_counter"], (200, 50)), (20, 10))
-        self.draw_text(f"{turn:{' '}>18}", 10, 30, (180, 180, 180))
+        self.draw_text(f"turn: {turn:{' '}>10}", 30, 28, (180, 180, 180))
 
         faction_colors = {key: value.color for key, value in factions.items()}
         units_by_faction = {key: len(value) for key, value in units.by_faction.items()}
@@ -246,36 +247,34 @@ class Display:
         sidebar_mode = "general"
         if unit_selected: sidebar_mode = "unit"
 
-        self.draw_rect_advanced(MENU_BACKGROUND, 200, winw - 200, 10, 190, winh - 200, (MENU_OUTLINE, 15))
+        self.draw_rect_advanced(MENU_BACKGROUND, 200, winw - 200, 10, 190, winh - 25, (MENU_OUTLINE, 5))
 
         y = 25
         if sidebar_mode == "general":
-            menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
+            menu_surface = pygame.Surface((190, winh - 25), pygame.SRCALPHA)
 
+            y -= self.menu_scroll
             for fid, faction in factions.items():
                 if units_by_faction[fid] == 0: continue
 
-                pygame.draw.rect(menu_surface, self.darken(faction.color, 1.5), (10, y, 20, 20), 0)
-                pygame.draw.rect(menu_surface, (100, 100, 100), (35, y, 135, 5))
+                pygame.draw.circle(menu_surface, self.darken(faction.color, 2.5), (20, y+5), 10)
+                pygame.draw.circle(menu_surface, self.darken(faction.color, 1.5), (20, y+5), 8)
+                surface, rect = self.font.render(f"{faction.ID}", (175, 175, 175))
+                menu_surface.blit(surface, (35, y))        
+        
+                pygame.draw.line(menu_surface, self.darken(faction.color, 2.5), (20, y + 15), (20, y + 15 + 25 * 4.7), 3)
 
                 y += 25
                 
-                # Draw Unit Counts  
-                surface, rect = self.font.render(f"Units: {units_by_faction[fid]}", TEXT_COLOR)
-                menu_surface.blit(surface, (10, y))
+                images = ["unit_icon", "cities_icon", "gold_icon", "wood_icon", "stone_icon"]
+                values = [units_by_faction[fid], cities_by_faction[fid], faction.materials["gold"], faction.materials["wood"], faction.materials["stone"]]
 
-                y += 25
-
-                # Draw City Counts
-                surface, rect = self.font.render(f"Cities: {cities_by_faction[fid]}", TEXT_COLOR)
-                menu_surface.blit(surface, (10, y))
-
-                y += 25
-
-                for key, val in faction.materials.items():
-                    surface, rect = self.font.render(f"{key}: {val}", TEXT_COLOR)
-                    menu_surface.blit(surface, (10, y))
-
+                for i in range(len(images)):
+                    image, value = images[i], values[i]
+                    pygame.draw.line(menu_surface, self.darken(faction.color, 2.5), (20, y+6), (50, y+6), 3)
+                    menu_surface.blit(self.images[image], (60, y-2))
+                    surface, rect = self.font.render(f"{value:{' '}<10}", (200, 200, 200))
+                    menu_surface.blit(surface, (80, y))
                     y += 25
 
         elif sidebar_mode == "unit":
@@ -334,7 +333,7 @@ class Display:
         elif unit.rank == "commander": size = 70
         size += unit.additional_size
 
-        x, y = display_pos[0] - ((size - 30) // 2), display_pos[1] - ((size - 30) // 2)
+        x, y = display_pos[0] - ((size - 30) // 2), display_pos[1] - ((size - 30))
 
         adjusted_x = x - self.camera_pos[0]
         adjusted_y = y - self.camera_pos[1]
@@ -387,16 +386,25 @@ POSSIBLE_FACTIONS = [
     ["Teal", (0, 128, 128)],
     ["Lime", (0, 255, 0)]]
 
+def get_faction_name(chosen_names):
+    name = random.choice(params.FACTION_NAMES)
+    while name in chosen_names:
+        name = random.choice(params.FACTION_NAMES)
+
+    chosen_names.append(name)
+    return name
 
 def gen_factions(gmap):
 
     factions = {}
-
+    chosen_names = []
     while len(factions) != 6:
-        name, color = POSSIBLE_FACTIONS[len(factions)]
+        name = get_faction_name(chosen_names)
+
+        _, color = POSSIBLE_FACTIONS[len(factions)]
         factions[name] = faction.Faction(
             name, params.STARTING_FACTION_MONEY,
-            ai.AI(), color, len(factions) * 999999999
+            ai.AI(), color, len(factions) * 999999999, name
         )
   
     return factions
@@ -810,7 +818,7 @@ def GameLoop(display):
     dragging, hover = False, False
     desired_scroll = display.zoom
     while display.run:
-
+        pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 display.run = False
@@ -843,14 +851,22 @@ def GameLoop(display):
                 #     TILE_Y_OFFSET += 1
                 
             elif event.type == pygame.MOUSEWHEEL:
-                scroll_val = min(max(event.y, -3), 3)/6 + 1
-                desired_scroll = max(min(scroll_val * desired_scroll, 10), 0.1)
-                
+                if pos[0] > winw - 200 and pos[0] < winw - 10 and pos[1] > 10 and pos[1] < winh - 25:
+                    display.menu_scroll += event.y * 10
+                    display.menu_scroll = max(display.menu_scroll, 0)
+
+                    
+                else:
+                    scroll_val = min(max(event.y, -3), 3)/6 + 1
+                    desired_scroll = max(min(scroll_val * desired_scroll, 2.5), 0.5)
+                    
 
             elif event.type == pygame.VIDEORESIZE:
                 display.width, display.height = event.w, event.h
                 display.screen = pygame.display.set_mode((event.w, event.h),
                                               pygame.RESIZABLE)
+
+                winw, winh = event.w, event.h
 
 
         if display.zoom != desired_scroll:
@@ -859,9 +875,8 @@ def GameLoop(display):
             change = difference * 0.25
             display.zoom -= change
 
-            display.zoom = max(min(display.zoom, 10), 0.1)
+            display.zoom = max(min(display.zoom, 2.5), 0.5)
     
-        pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
         if pressed[0] and pressed_time == 0: pressed_time = time.perf_counter()
         if selected_unit and not pressed[0] and time.perf_counter() - pressed_time < 0.1: selected_unit = None
         if not pressed[0] and pressed_time != 0: pressed_time = 0

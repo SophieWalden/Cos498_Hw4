@@ -54,7 +54,7 @@ STRUCTURE_COST = {
 # What do structures give every turn?
 STRUCTURE_OUTPUT = {
     "woodcutter": {"wood": 1},
-    "miner": {"stone": 1}
+    "miner": {"stone": 1, "gold": 1}
 }
 
 # The rest of this is used to give the cities random
@@ -66,6 +66,12 @@ with open('city_names') as f:
     for line in f:
         line = line.strip()
         CITY_IDS.append(line)
+        
+FACTION_NAMES = []
+with open('faction_names.txt') as f:
+    for line in f:
+        line = line.strip()
+        if line: FACTION_NAMES.append(line)
 
 def get_random_city_ID():
     return random.choice(CITY_IDS)
