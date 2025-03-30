@@ -154,7 +154,7 @@ class Display:
                 image = {"P": self.images["paper_unit"], "R": self.images["rock_unit"], "S": self.images["scissor_unit"]}[u.utype]
                 image = image.copy()
          
-                image.fill((fcolor[0], fcolor[1], fcolor[2], 0.3), special_flags = pygame.BLEND_ADD)
+                image.fill(self.darken(fcolor, 0.5), special_flags = pygame.BLEND_RGBA_MULT)
 
                 x, y = u.display_pos
 
@@ -294,10 +294,23 @@ class Display:
             menu_surface.blit(surface, (10, y))
             y += 25
 
-            if unit_selected.targeted_city:
-                surface, rect = self.font.render(f"Targeting: {unit_selected.targeted_city.pos.x} {unit_selected.targeted_city.pos.y}", TEXT_COLOR)
+            if unit_selected.targeted_pos:
+                surface, rect = self.font.render(f"Targeting: {unit_selected.targeted_pos[0]} {unit_selected.targeted_pos[1]}", TEXT_COLOR)
                 menu_surface.blit(surface, (10, y))
                 y += 25
+
+            if unit_selected.move_queue:
+                
+                end_pos = unit_selected.move_queue["end_pos"]
+                surface, rect = self.font.render(f"Going to: {end_pos[0]} {end_pos[1]}", TEXT_COLOR)
+                menu_surface.blit(surface, (10, y))
+                y += 25
+
+                if (unit_selected.pos.x, unit_selected.pos.y) in unit_selected.move_queue:
+                    current_move = unit_selected.move_queue[(unit_selected.pos.x, unit_selected.pos.y)]
+                    surface, rect = self.font.render(f"Current move: {current_move}", TEXT_COLOR)
+                    menu_surface.blit(surface, (10, y))
+                    y += 25
 
         self.screen.blit(menu_surface, ((winw - 200, 10)))
 
@@ -313,7 +326,7 @@ class Display:
         self.screen.blit(surface, (x, y))
 
     def darken(self, color, strength):
-        return [pixel_value / strength for pixel_value in color]
+        return [max(min(int(pixel_value / strength), 255), 0) for pixel_value in color]
     
     def get_unit_actual_pos(self, unit):
         display_pos = unit.display_pos
@@ -357,13 +370,12 @@ def gen_game_map(width, height):
     return game_map.GameMap(width, height)
 
 POSSIBLE_FACTIONS = [
-    ["Red", (255, 0, 0)],
-    ["Blue", (0, 0, 255)],
-    ["Green", (0, 255, 0)],
-    ["Yellow", (255, 255, 0)],
-    ["Orange", (255, 165, 0)],
+    ["Red", (200, 0, 0)],
+    ["Blue", (0, 0, 200)],
+    ["Green", (0, 200, 0)],
+    ["Yellow", (200, 200, 0)],
     ["Purple", (128, 0, 128)],
-    ["Cyan", (0, 255, 255)],
+    ["Cyan", (0, 200, 200)],
     ["Magenta", (255, 0, 255)],
     ["Pink", (255, 192, 203)],
     ["Brown", (139, 69, 19)],
@@ -381,7 +393,7 @@ def gen_factions(gmap):
 
     factions = {}
 
-    while len(factions) != 3:
+    while len(factions) != 6:
         name, color = POSSIBLE_FACTIONS[len(factions)]
         factions[name] = faction.Faction(
             name, params.STARTING_FACTION_MONEY,
@@ -811,7 +823,7 @@ def GameLoop(display):
                 elif event.key == pygame.K_LEFT:
 
                     # Lower if you want a faster game speed.
-                    if speed > 1:
+                    if speed > 64:
                         speed = speed // 2
                 elif event.key == pygame.K_RIGHT:
 
@@ -924,7 +936,7 @@ def GameLoop(display):
         else:
             pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
         
-        display.create_animation(combat_positions, 1.5, "battle_animation")
+        display.create_animation(combat_positions, 3, "battle_animation")
         display.create_animation([item[0] for item in building_positions if item[1] == "woodcutter"], 2, "woodcutter_upgrade")
         display.create_animation([item[0] for item in building_positions if item[1] == "miner"], 2, "miner_upgrade")
         display.draw_map(gmap)

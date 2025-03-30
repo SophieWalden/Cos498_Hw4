@@ -40,10 +40,10 @@ def get_random_terrain(roll):
 CITY_INCOME = 3
 
 # How many cities does each faction start with?
-CITIES_PER_FACTION = 6
+CITIES_PER_FACTION = 3
 
 # How much money does a faction start with?
-STARTING_FACTION_MONEY = 1000
+STARTING_FACTION_MONEY = 500
 
 # How much money do structures cost?
 STRUCTURE_COST = {

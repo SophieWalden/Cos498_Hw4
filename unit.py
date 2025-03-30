@@ -64,7 +64,7 @@ class Unit:
         self.sight_radius = sight_radius
         self.rank = "soldier"
         self.dead = False
-        self.targeted_city = None
+        self.targeted_pos = None
         self.general_following = None
         self.additional_size = 0
 
@@ -104,7 +104,7 @@ class Unit:
         if len(available_cities) == 0: return None
 
         chosen_city = min(available_cities, key=lambda city: abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y))
-        self.targeted_city = chosen_city
+        self.targeted_pos = (chosen_city.pos.x, chosen_city.pos.y)
 
     def choose_general(self, generals):
         if len(generals) == 0: return None
@@ -121,8 +121,18 @@ class Unit:
 
                 if distance < minimum_distance:
                     minimum_distance = distance
-                    self.targeted_city = key
+                    self.targeted_pos = (key.x, key.y)
                     terrain_found = True
 
         return terrain_found
-       
+    
+    def choose_targeted_unit(self, units):
+        available_units = []
+        for fid, units_map in units.items():
+            if fid != self.faction_id:
+                available_units.extend(units_map)
+
+        if len(available_units) == 0: return None
+
+        chosen_unit = min(available_units, key=lambda unit: abs(unit.pos.x - self.pos.x) + abs(unit.pos.y - self.pos.y))
+        self.targeted_pos = (chosen_unit.pos.x, chosen_unit.pos.y)
