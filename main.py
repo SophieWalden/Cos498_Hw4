@@ -596,6 +596,7 @@ def RunDefectCommand(cmd, factions, unit_dict):
             unit.faction_id = name
             unit.move_queue = {}
 
+    general.rank = "commander"
     if general in current_faction.generals: current_faction.generals.remove(general)
     for index in units_to_remove_index[::-1]:
         unit_dict.by_faction[faction_id].pop(index)
@@ -884,8 +885,13 @@ def GameLoop(display):
     combat_positions = []
     building_positions = []
 
+    flow_field_queue = []
+    for city in cities:
+        pos = (city.pos.x, city.pos.y)
+        flow_field_queue.append(pos)
 
     # Starting game speed (real time between turns) in milliseconds.
+    current_turn_time_ms = 0
     speed = 1024
     ticks = 0
     turn = 1
@@ -907,7 +913,7 @@ def GameLoop(display):
                 elif event.key == pygame.K_LEFT:
 
                     # Lower if you want a faster game speed.
-                    if speed > 64:
+                    if speed > 32:
                         speed = speed // 2
                 elif event.key == pygame.K_RIGHT:
 
@@ -1004,11 +1010,14 @@ def GameLoop(display):
                     wanted_pos = u.world_to_cord(u.pos)
                     
                     dist = abs(wanted_pos[0] - u.display_pos[0]) + abs(wanted_pos[1] - u.display_pos[1]) 
-                    UNIT_SPEED = 1000/(speed+1)
-                    if dist <= UNIT_SPEED * 2 or dist > 65:
+                    UNIT_SPEED = dist * 0.1
+                    if dist > 500 or dist < 5:
                         u.display_pos = wanted_pos
                         u.moving = False
                     else:
+                        if dist > 250:
+                            UNIT_SPEED = dist * 0.5
+                    
                         angle = math.atan2(wanted_pos[1] - u.display_pos[1], wanted_pos[0] - u.display_pos[0])
                         x_delta, y_delta = math.cos(angle) * UNIT_SPEED, math.sin(angle) * UNIT_SPEED
                         
@@ -1053,10 +1062,25 @@ def GameLoop(display):
  
 
 
+    
         pygame.display.flip()
+
+        if current_turn_time_ms:
+            time_difference = time.perf_counter() - current_turn_time_ms
+
+            while time_difference < 0.03:
+                time_difference = time.perf_counter() - current_turn_time_ms
+
+                if flow_field_queue:
+                    pos = flow_field_queue.pop(0)
+                    move_cache[pos] = ai.create_flow_field(pos, gmap)
+                else:
+                    break
+
         dt = display.clock.tick(60)
         ticks += dt
         display.ticks += dt
+        current_turn_time_ms = time.perf_counter()
 
 
 def main(display=None):

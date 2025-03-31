@@ -87,3 +87,5 @@ Change out A* pathfinding for field flow pathfinding
 
 Create a cache for flowfields?
 At the start cache the flowfield for every city for REALLY quick lookup (We onto to good optimizations??)
+
+Commanders are multidefecting by being assigned to general on faction creation

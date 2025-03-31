@@ -12,6 +12,8 @@
 #     unit, nothing happens. If it is occupied by another faction,
 #     combat ensues.
 
+import math
+from collections import deque
 from command import *
 import random
 import unit
@@ -19,6 +21,48 @@ from city import City
 import time
 import cell_terrain
 import params
+
+def create_flow_field(pos, gmap):
+    flow_field = {}
+
+    tile_costs = [[99999] * gmap.width for _ in range(gmap.height)]
+    for v, c in gmap.cell_render_queue:
+        if c.terrain == cell_terrain.Terrain.Water:
+            tile_costs[v.y][v.x] = math.inf
+
+    queue = deque([pos])
+    tile_costs[pos[1]][pos[0]] = 0
+
+    directions = [[-1, 0], [1, 0], [0, 1], [0, -1]]
+    while queue:
+        x, y = queue.popleft()
+
+        for dx, dy in directions:
+            new_x, new_y = x + dx, y + dy
+
+            if 0 <= new_x < gmap.width and 0 <= new_y < gmap.height and tile_costs[new_y][new_x] != math.inf:
+                new_cost = tile_costs[y][x] + 1
+
+                if new_cost < tile_costs[new_y][new_x]:
+                    tile_costs[new_y][new_x] = new_cost
+                    queue.append((new_x, new_y))
+    
+    for j in range(gmap.height):
+        for i in range(gmap.width):
+            min_cost = math.inf
+            best_dir = "S"
+
+            for index, (dx, dy) in enumerate(directions):
+                new_x, new_y = i + dx, j + dy
+
+                if 0 <= new_x < gmap.width and 0 <= new_y < gmap.height:
+                    if tile_costs[new_y][new_x] < min_cost:
+                        min_cost = tile_costs[new_y][new_x]
+                        best_dir = ["W","E","S","N"][index]
+
+            flow_field[(i, j)] = best_dir
+
+    return flow_field
 
 class AI:
     # init:
@@ -181,6 +225,9 @@ class AI:
 
             if u.general_following:
                 pos = (u.pos.x, u.pos.y)
+                if pos == u.general_following.targeted_pos:
+                    u.general_following.targeted_pos = None
+
                 if pos in u.general_following.flow_field:
                     unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, u.general_following.flow_field[pos])
   
@@ -213,7 +260,7 @@ class AI:
         # AI System makes its decisions here
         self.system.build_units_queue = []
         self.build_structures_queue = []
-        self.system.tick(current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos)
+        self.system.tick(current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache)
 
         # Constructing and returning all of the commands
         cmds = []
@@ -239,7 +286,7 @@ class System:
         self.build_units_queue = []
         self.build_structures_queue = []
 
-    def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos):
+    def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache):
         for general in current_faction.generals:
             if current_faction.commander and current_faction.commander.soldiers_killed >= general.general_accepted_death_threshhold:
                 general.defecting = True
@@ -253,11 +300,11 @@ class System:
         if current_faction.goal[0] == "conquer":
             for general in current_faction.generals:
                 if (not general.targeted_pos or general.targeted_pos in current_cities_pos) and total_cities != len(current_cities):
-                    general.choose_targeted_city(cities, factions, current_faction.goal[1], gmap)
+                    general.choose_targeted_city(cities, factions, current_faction.goal[1], gmap, move_cache)
                     general.targeting_age = current_faction.age
 
                 if total_cities == len(current_cities):
-                    general.choose_targeted_unit(units, gmap) 
+                    general.choose_targeted_unit(units, gmap, move_cache) 
                     general.targeting_age = current_faction.age
 
                 
@@ -266,7 +313,7 @@ class System:
             for general in current_faction.generals:
                 wanted_terrain = (cell_terrain.Terrain.Forest, cell_terrain.Terrain.Woodcutter) if current_faction.goal[1] == "wood" else (cell_terrain.Terrain.Stone, cell_terrain.Terrain.Miner)
                 if not general.targeted_pos or gmap.cells[vec2.Vec2(general.targeted_pos[0], general.targeted_pos[1])].terrain not in wanted_terrain:
-                    terrain_found = general.choose_target_terrain(gmap, wanted_terrain)
+                    terrain_found = general.choose_target_terrain(gmap, wanted_terrain, move_cache)
                     general.targeting_age = current_faction.age
     
                     if not terrain_found:

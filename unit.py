@@ -7,6 +7,7 @@ import random
 import math
 import cell_terrain
 from collections import deque
+from ai import create_flow_field
 
 # UNIT_COSTS is a constant dictionary that holds the resource (money)
 # costs for each type of unit.
@@ -106,7 +107,7 @@ class Unit:
         else:
             return random.randint(0, 10)
 
-    def choose_targeted_city(self, citiesDict, factions, decisionType, gmap):
+    def choose_targeted_city(self, citiesDict, factions, decisionType, gmap, move_cache):
         available_cities = []
         units_by_faction = {}
         for fid, cities in citiesDict.items():
@@ -122,7 +123,7 @@ class Unit:
         else: chosen_city = min(available_cities, key=lambda city: (units_by_faction[city.faction_id], abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y)))
 
         self.targeted_pos = (chosen_city.pos.x, chosen_city.pos.y)
-        self.create_flow_field(self.targeted_pos, gmap)
+        self.create_flow_field(self.targeted_pos, gmap, move_cache)
 
     def choose_general(self, generals):
         if len(generals) == 0: return None
@@ -130,7 +131,7 @@ class Unit:
         chosen_general = min(generals, key=lambda general: abs(general.pos.x - self.pos.x) + abs(general.pos.y - self.pos.y))
         self.general_following = chosen_general
 
-    def choose_target_terrain(self, gmap, terrain_types):
+    def choose_target_terrain(self, gmap, terrain_types, move_cache):
         minimum_distance = 9999
         terrain_found = False
         for key, cell in gmap.cells.items():
@@ -142,11 +143,11 @@ class Unit:
                     self.targeted_pos = (key.x, key.y)
                     terrain_found = True
 
-        if terrain_found: self.create_flow_field(self.targeted_pos, gmap)
+        if terrain_found: self.create_flow_field(self.targeted_pos, gmap, move_cache)
 
         return terrain_found
     
-    def choose_targeted_unit(self, units, gmap):
+    def choose_targeted_unit(self, units, gmap, move_cache):
         available_units = []
         for fid, units_map in units.items():
             if fid != self.faction_id:
@@ -156,49 +157,17 @@ class Unit:
 
         chosen_unit = min(available_units, key=lambda unit: abs(unit.pos.x - self.pos.x) + abs(unit.pos.y - self.pos.y))
         self.targeted_pos = (chosen_unit.pos.x, chosen_unit.pos.y)
-        self.create_flow_field(self.targeted_pos, gmap)
+        self.create_flow_field(self.targeted_pos, gmap, move_cache)
 
-    def create_flow_field(self, pos, gmap):
-        flow_field = {}
+    def create_flow_field(self, pos, gmap, move_cache):
+        if pos in move_cache:
+            return move_cache[pos]
 
-        tile_costs = [[99999] * gmap.width for _ in range(gmap.height)]
-        for v, c in gmap.cell_render_queue:
-            if c.terrain == cell_terrain.Terrain.Water:
-                tile_costs[v.y][v.x] = math.inf
+        flow_field = create_flow_field(pos, gmap)
 
-        queue = deque([pos])
-        tile_costs[pos[1]][pos[0]] = 0
-
-        directions = [[-1, 0], [1, 0], [0, 1], [0, -1]]
-        while queue:
-            x, y = queue.popleft()
-
-            for dx, dy in directions:
-                new_x, new_y = x + dx, y + dy
-
-                if 0 <= new_x < gmap.width and 0 <= new_y < gmap.height and tile_costs[new_y][new_x] != math.inf:
-                    new_cost = tile_costs[y][x] + 1
-
-                    if new_cost < tile_costs[new_y][new_x]:
-                        tile_costs[new_y][new_x] = new_cost
-                        queue.append((new_x, new_y))
         
-        for j in range(gmap.height):
-            for i in range(gmap.width):
-                min_cost = math.inf
-                best_dir = "S"
-
-                for index, (dx, dy) in enumerate(directions):
-                    new_x, new_y = i + dx, j + dy
-
-                    if 0 <= new_x < gmap.width and 0 <= new_y < gmap.height:
-                        if tile_costs[new_y][new_x] < min_cost:
-                            min_cost = tile_costs[new_y][new_x]
-                            best_dir = ["W","E","S","N"][index]
-
-                flow_field[(i, j)] = best_dir
-
         self.flow_field = flow_field
+        move_cache[pos[:]] = flow_field
 
 
 
