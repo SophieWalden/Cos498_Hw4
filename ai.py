@@ -238,7 +238,7 @@ class System:
             if current_faction.commander and current_faction.commander.soldiers_killed >= general.general_accepted_death_threshhold:
                 general.defecting = True
             
-            if general.targeting_age > current_faction.age + 40:
+            if general.targeting_age + 40 < current_faction.age:
                 general.targeted_pos = None
 
             if general.targeted_pos and general.targeted_pos in current_structures_pos:
