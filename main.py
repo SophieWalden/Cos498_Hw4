@@ -298,18 +298,15 @@ class Display:
                 menu_surface.blit(surface, (10, y))
                 y += 25
 
-            if unit_selected.move_queue:
-                
-                end_pos = unit_selected.move_queue["end_pos"]
-                surface, rect = self.font.render(f"Going to: {end_pos[0]} {end_pos[1]}", TEXT_COLOR)
-                menu_surface.blit(surface, (10, y))
-                y += 25
+            if unit_selected.general_following and unit_selected.general_following.flow_field:
+                pos = (unit_selected.pos.x, unit_selected.pos.y)
 
-                if (unit_selected.pos.x, unit_selected.pos.y) in unit_selected.move_queue:
-                    current_move = unit_selected.move_queue[(unit_selected.pos.x, unit_selected.pos.y)]
+                if pos in unit_selected.general_following.flow_field:
+                    current_move = unit_selected.general_following.flow_field[pos]
                     surface, rect = self.font.render(f"Current move: {current_move}", TEXT_COLOR)
                     menu_surface.blit(surface, (10, y))
                     y += 25
+
 
             if unit_selected.rank == "commander":
                 goal, subgoal = factions[unit_selected.faction_id].goal
@@ -1007,8 +1004,8 @@ def GameLoop(display):
                     wanted_pos = u.world_to_cord(u.pos)
                     
                     dist = abs(wanted_pos[0] - u.display_pos[0]) + abs(wanted_pos[1] - u.display_pos[1]) 
-                    UNIT_SPEED = 1500/(speed+1)
-                    if dist <= UNIT_SPEED * 2 or dist > 100:
+                    UNIT_SPEED = 1000/(speed+1)
+                    if dist <= UNIT_SPEED * 2 or dist > 65:
                         u.display_pos = wanted_pos
                         u.moving = False
                     else:

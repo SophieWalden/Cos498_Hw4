@@ -172,25 +172,31 @@ class AI:
     def unit_pathfinding(self, current_units, current_cities_pos, cities, move_cache, gmap, faction_id, current_faction):
         unit_commands = {}
         for u in current_units:
-            if u.general_following:
-                if u.general_following.dead:
-                    u.move_queue = {}
+            # if u.general_following:
+            #     if u.general_following.dead:
+            #         u.move_queue = {}
                 
-                elif u.general_following.targeted_pos and u.move_queue and (u.general_following.targeted_pos[0] != u.move_queue["end_pos"][0] or u.general_following.targeted_pos[1] != u.move_queue["end_pos"][1]):
-                    u.move_queue = {}
+            #     elif u.general_following.targeted_pos and u.move_queue and (u.general_following.targeted_pos[0] != u.move_queue["end_pos"][0] or u.general_following.targeted_pos[1] != u.move_queue["end_pos"][1]):
+            #         u.move_queue = {}
 
             if u.general_following:
-                u.targeted_pos = u.general_following.targeted_pos
+                pos = (u.pos.x, u.pos.y)
+                if pos in u.general_following.flow_field:
+                    unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, u.general_following.flow_field[pos])
+  
+
             elif u.rank == "commander" and current_cities_pos: # Commander by default goes to closest city defensively
                 u.targeted_pos = min(current_cities_pos, key=lambda pos: (pos[0] - u.pos.x)**2+(pos[1] - u.pos.y)**2)
 
-            pos = (u.pos.x, u.pos.y)
-            if (not u.move_queue or pos not in u.move_queue or pos == u.move_queue["end_pos"] or current_faction.age > u.age_assigned_moves + 40) and random.random() < 0.5:
-                self.pathplan(u, move_cache, gmap)
-                u.age_assigned_moves = current_faction.age
 
-            if pos in u.move_queue:
-                unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, u.move_queue[pos])
+            
+            # pos = (u.pos.x, u.pos.y)
+            # if (not u.move_queue or pos not in u.move_queue or pos == u.move_queue["end_pos"] or current_faction.age > u.age_assigned_moves + 40) and random.random() < 0.5:
+            #     self.pathplan(u, move_cache, gmap)
+            #     u.age_assigned_moves = current_faction.age
+
+            # if pos in u.move_queue:
+            #     unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, u.move_queue[pos])
 
             if u.ID not in unit_commands:
                 rand_dir = random.choice(list(vec2.MOVES.keys()))
@@ -247,11 +253,11 @@ class System:
         if current_faction.goal[0] == "conquer":
             for general in current_faction.generals:
                 if (not general.targeted_pos or general.targeted_pos in current_cities_pos) and total_cities != len(current_cities):
-                    general.choose_targeted_city(cities, factions, current_faction.goal[1])
+                    general.choose_targeted_city(cities, factions, current_faction.goal[1], gmap)
                     general.targeting_age = current_faction.age
 
                 if total_cities == len(current_cities):
-                    general.choose_targeted_unit(units) 
+                    general.choose_targeted_unit(units, gmap) 
                     general.targeting_age = current_faction.age
 
                 

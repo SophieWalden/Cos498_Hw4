@@ -77,4 +77,13 @@ What does it need?
   - Unit Selection Panel
    - All unit information.
 
-Pretty muhc just needs to be a stylzed panel on the right side that changes betwene the two modes
+
+
+Change out A* pathfinding for field flow pathfinding
+ - Compute when general finds a spot
+ - Units look to general for where they should move
+ - When any unit gets to the end spot the general can re-plan
+ - Removes A* pathfinding for EVERY unit (godbless)
+
+Create a cache for flowfields?
+At the start cache the flowfield for every city for REALLY quick lookup (We onto to good optimizations??)
