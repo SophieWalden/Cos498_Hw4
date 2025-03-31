@@ -70,6 +70,14 @@ class Unit:
 
         self.move_queue = {}
 
+        self.general_accepted_death_threshhold = random.randint(5, 20)
+        self.soldiers_lost, self.soldiers_killed = 0, 0
+        self.defecting = False
+        self.age_assigned_moves = 0
+        self.targeting_age = 0
+
+        self.aptitudes = {"gather": random.random(), "conquer": random.random() * 10, "defend": random.random()* 0.2, "gather_materials": {"wood": random.random(), "stone": random.random()}, "conquer_style": {"closest": random.random(), "fewest_enemies": random.random()}}
+
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""
         x = pos.x * TILE_X_OFFSET - pos.y * TILE_X_OFFSET
@@ -95,15 +103,21 @@ class Unit:
         else:
             return random.randint(0, 10)
 
-    def choose_targeted_city(self, citiesDict):
+    def choose_targeted_city(self, citiesDict, factions, decisionType):
         available_cities = []
+        units_by_faction = {}
         for fid, cities in citiesDict.items():
             if fid != self.faction_id:
                 available_cities.extend(cities)
 
+        for fid, faction in factions.items():
+            units_by_faction[fid] = len(faction.generals)
+
         if len(available_cities) == 0: return None
 
-        chosen_city = min(available_cities, key=lambda city: abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y))
+        if decisionType == "closest": chosen_city = min(available_cities, key=lambda city: abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y))
+        else: chosen_city = min(available_cities, key=lambda city: (units_by_faction[city.faction_id], abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y)))
+
         self.targeted_pos = (chosen_city.pos.x, chosen_city.pos.y)
 
     def choose_general(self, generals):
@@ -112,11 +126,11 @@ class Unit:
         chosen_general = min(generals, key=lambda general: abs(general.pos.x - self.pos.x) + abs(general.pos.y - self.pos.y))
         self.general_following = chosen_general
 
-    def choose_target_terrain(self, gmap, terrain_type):
+    def choose_target_terrain(self, gmap, terrain_types):
         minimum_distance = 9999
         terrain_found = False
         for key, cell in gmap.cells.items():
-            if cell.terrain == terrain_type:
+            if cell.terrain in terrain_types and (cell.owned_by == None or cell.owned_by.ID != self.faction_id):
                 distance = abs(key.x - self.pos.x) + abs(key.y - self.pos.y)
 
                 if distance < minimum_distance:
@@ -136,3 +150,17 @@ class Unit:
 
         chosen_unit = min(available_units, key=lambda unit: abs(unit.pos.x - self.pos.x) + abs(unit.pos.y - self.pos.y))
         self.targeted_pos = (chosen_unit.pos.x, chosen_unit.pos.y)
+
+    def choose_goal(self):
+        """Chooses goal based on units aptitude"""
+
+        goal = random.choices(["gather", "conquer", "defend"], weights=[self.aptitudes["gather"], self.aptitudes["conquer"], self.aptitudes['defend']])[0]
+        subgoal = None
+
+        if goal == "gather":
+            subgoal = random.choices(list(self.aptitudes["gather_materials"].keys()), weights=self.aptitudes["gather_materials"].values())[0]
+        elif goal == "conquer":
+            subgoal = random.choices(list(self.aptitudes["conquer_style"].keys()), weights=self.aptitudes["conquer_style"].values())[0]
+
+        return [goal, subgoal]
+        

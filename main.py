@@ -17,6 +17,7 @@ from cell import Cell
 import sys
 from collections import defaultdict
 from structure import Structure
+from faction import Faction
 
 # ###################################################################
 # DISPLAY
@@ -255,19 +256,19 @@ class Display:
 
             y -= self.menu_scroll
             for fid, faction in factions.items():
-                if units_by_faction[fid] == 0: continue
+                if fid not in units_by_faction or (cities_by_faction[fid] == 0 and units_by_faction[fid] == 0): continue
 
                 pygame.draw.circle(menu_surface, self.darken(faction.color, 2.5), (20, y+5), 10)
                 pygame.draw.circle(menu_surface, self.darken(faction.color, 1.5), (20, y+5), 8)
                 surface, rect = self.font.render(f"{faction.ID}", (175, 175, 175))
                 menu_surface.blit(surface, (35, y))        
         
-                pygame.draw.line(menu_surface, self.darken(faction.color, 2.5), (20, y + 15), (20, y + 15 + 25 * 4.7), 3)
+                pygame.draw.line(menu_surface, self.darken(faction.color, 2.5), (20, y + 15), (20, y + 15 + 25 * 5.7), 3)
 
                 y += 25
                 
-                images = ["unit_icon", "cities_icon", "gold_icon", "wood_icon", "stone_icon"]
-                values = [units_by_faction[fid], cities_by_faction[fid], faction.materials["gold"], faction.materials["wood"], faction.materials["stone"]]
+                images = ["time_clock", "unit_icon", "cities_icon", "gold_icon", "wood_icon", "stone_icon"]
+                values = [faction.age, units_by_faction[fid], cities_by_faction[fid], faction.materials["gold"], faction.materials["wood"], faction.materials["stone"]]
 
                 for i in range(len(images)):
                     image, value = images[i], values[i]
@@ -309,6 +310,17 @@ class Display:
                     surface, rect = self.font.render(f"Current move: {current_move}", TEXT_COLOR)
                     menu_surface.blit(surface, (10, y))
                     y += 25
+
+            if unit_selected.rank == "commander":
+                goal, subgoal = factions[unit_selected.faction_id].goal
+
+                surface, rect = self.font.render(f"Goal: {goal}", TEXT_COLOR)
+                menu_surface.blit(surface, (10, y))
+                y += 25
+
+                surface, rect = self.font.render(f"Subgoal: {subgoal}", TEXT_COLOR)
+                menu_surface.blit(surface, (10, y))
+                y += 25
 
         self.screen.blit(menu_surface, ((winw - 200, 10)))
 
@@ -375,31 +387,52 @@ POSSIBLE_FACTIONS = [
     ["Purple", (128, 0, 128)],
     ["Cyan", (0, 200, 200)],
     ["Magenta", (255, 0, 255)],
-    ["Pink", (255, 192, 203)],
+    ["Pink", (255, 105, 180)],
     ["Brown", (139, 69, 19)],
     ["Black", (0, 0, 0)],
     ["White", (255, 255, 255)],
     ["Gray", (169, 169, 169)],
-    ["Violet", (238, 130, 238)],
+    ["Violet", (148, 0, 211)], 
     ["Indigo", (75, 0, 130)],
-    ["Turquoise", (64, 224, 208)],
+    ["Turquoise", (48, 213, 200)], 
     ["Teal", (0, 128, 128)],
-    ["Lime", (0, 255, 0)]]
+    ["Lime", (50, 205, 50)], 
+    ["Orange", (255, 165, 0)],  
+    ["Maroon", (128, 0, 0)],  
+    ["Gold", (255, 215, 0)],  
+    ["Deep Sky Blue", (0, 191, 255)],  
+    ["Olive", (128, 128, 0)],  
+    ["Navy", (0, 0, 128)],  
+    ["Lavender", (230, 230, 250)],  
+    ["Crimson", (220, 20, 60)],  
+    ["Charcoal", (54, 69, 79)],  
+    ["Periwinkle", (204, 204, 255)],  
+    ["Amber", (255, 191, 0)],  
+    ["Rose", (255, 0, 127)],  
+    ["Mint", (189, 252, 201)],  
+    ["Sapphire", (15, 82, 186)],  
+    ["Emerald", (80, 200, 120)],  
+    ["Ruby", (224, 17, 95)],  
+    ["Azure", (0, 127, 255)],  
+]
 
 def get_faction_name(chosen_names):
+    if len(chosen_names) == len(params.FACTION_NAMES):
+        return random.choice(params.FACTION_NAMES)
+
     name = random.choice(params.FACTION_NAMES)
     while name in chosen_names:
         name = random.choice(params.FACTION_NAMES)
 
-    chosen_names.append(name)
     return name
 
 def gen_factions(gmap):
 
     factions = {}
     chosen_names = []
-    while len(factions) != 6:
+    while len(factions) != 7:
         name = get_faction_name(chosen_names)
+        chosen_names.append(name)
 
         _, color = POSSIBLE_FACTIONS[len(factions)]
         factions[name] = faction.Faction(
@@ -465,6 +498,8 @@ def FactionPreTurn(cities, faction):
     for structure in faction.structures:
         for key, val in structure.generate_material().items():
             faction.materials[key] += val
+
+    faction.age += 1
 
     # #####################################################
     # CITY DATA
@@ -533,10 +568,44 @@ def RunAllCommands(commands, factions, unit_dict, cities, gmap):
         elif isinstance(cmd, command.BuildStructureCommand):
             building_pos = RunBuildStructureCommand(cmd, gmap)
             if building_pos: buidling_positions.extend(building_pos)
+        elif isinstance(cmd, command.DefectCommand):
+            RunDefectCommand(cmd, factions, unit_dict)
         else:
             print(f"Bad command type: {type(cmd)}")
 
     return combat_positions, buidling_positions
+
+def RunDefectCommand(cmd, factions, unit_dict):
+    faction_id, current_faction, general = cmd.faction_id, cmd.faction, cmd.unit
+    if general.dead: return
+
+    name = get_faction_name(factions.keys())
+
+    alive_colors = [faction.color for fid, faction in factions.items()]
+    _, color = random.choice(POSSIBLE_FACTIONS)
+    while color in alive_colors:
+        _, color = random.choice(POSSIBLE_FACTIONS)
+
+    factions[name] = Faction(
+        name, params.STARTING_FACTION_MONEY,
+        ai.AI(), color, len(factions) * 999999999, name, general
+    )
+    new_unit_list = []
+    units_to_remove_index = []
+    for i, unit in enumerate(unit_dict.by_faction[faction_id]):
+        if unit.ID == general.ID or unit.general_following and unit.general_following.ID == general.ID:
+            units_to_remove_index.append(i)
+            new_unit_list.append(unit)
+            unit.faction_id = name
+            unit.move_queue = {}
+
+    if general in current_faction.generals: current_faction.generals.remove(general)
+    for index in units_to_remove_index[::-1]:
+        unit_dict.by_faction[faction_id].pop(index)
+
+
+    unit_dict.by_faction[name] = new_unit_list[:]
+
 
 def RunBuildStructureCommand(cmd, gmap):
     building_pos = []
@@ -628,6 +697,13 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
                 unit_dict.move_unit(u, old_pos, new_pos)
                 move_successful = True
             
+                # This commander had another unit die
+                if factions[other_unit.faction_id].commander:
+                    factions[other_unit.faction_id].commander.soldiers_lost += 1
+                
+                if factions[theunit.faction_id].commander:
+                    factions[theunit.faction_id].commander.soldiers_killed += 1 
+
             if theunit.health <= 0:
                 combat_pos = theunit.pos
                 theunit.dead = True
@@ -647,11 +723,13 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
             for i, structure in enumerate(faction.structures):
                 if structure.pos == new_pos and fid != theunit.faction_id:
                     indexes_to_remove.append(i)
-                    factions[theunit.faction_id].structures.append(structure)
-                    gmap.cells[new_pos].owned_by = factions[theunit.faction_id]
 
             for index in indexes_to_remove[::-1]:
                 faction.structures.pop(index)
+
+        if gmap.cells[new_pos].terrain in (cell_terrain.Terrain.Woodcutter, cell_terrain.Terrain.Miner):
+             factions[theunit.faction_id].structures.append(structure)
+             gmap.cells[new_pos].owned_by = factions[theunit.faction_id]
 
         theunit.moving = True
 
@@ -753,6 +831,8 @@ class UnitDict:
         self.by_faction[u.faction_id].append(u)
         self.add_unit_by_pos(u, u.pos)
     def remove_unit(self, u):
+        if u not in self.by_faction[u.faction_id]: return 
+
         self.by_faction[u.faction_id].remove(u)
         self.remove_unit_by_pos(u, u.pos)
     def is_pos_free(self, pos):
@@ -891,9 +971,20 @@ def GameLoop(display):
         if ticks >= speed and not GAME_OVER:
             ticks = 0
             cities_by_faction = {}
+            delete_factions = []
             for fid, f in factions.items():
                 faction_cities = FactionPreTurn(cities, f)
                 cities_by_faction[fid] = faction_cities
+
+                if len(faction_cities) == 0 and len(unit_dict.by_faction[fid]) == 0:
+                    for structure in f.structures:
+                        structure.owned_by = None
+                    
+                    delete_factions.append(fid)
+            
+            for fid in delete_factions: 
+                del factions[fid]
+                del unit_dict.by_faction[fid]
 
             commands, move_cache = Turn(factions, gmap,
                             cities_by_faction,
@@ -916,8 +1007,8 @@ def GameLoop(display):
                     wanted_pos = u.world_to_cord(u.pos)
                     
                     dist = abs(wanted_pos[0] - u.display_pos[0]) + abs(wanted_pos[1] - u.display_pos[1]) 
-                    UNIT_SPEED = 1000/(speed+1)
-                    if dist <= UNIT_SPEED * 2 or dist > 500:
+                    UNIT_SPEED = 1500/(speed+1)
+                    if dist <= UNIT_SPEED * 2 or dist > 100:
                         u.display_pos = wanted_pos
                         u.moving = False
                     else:

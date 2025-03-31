@@ -22,3 +22,9 @@ class BuildStructureCommand(Command):
         self.faction = faction
         self.pos = position
         self.utype = utype
+
+class DefectCommand(Command):
+    def __init__(self, faction_id, faction, unit):
+        Command.__init__(self, faction_id)
+        self.faction = faction
+        self.unit = unit

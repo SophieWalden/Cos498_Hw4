@@ -50,7 +50,7 @@ class GameMap:
             
         # Get rid of isolated water tiles
         board = self.remove_isolated(board, 2, 5)
-
+        board = self.remove_islands(board)
         
         for j, row in enumerate(board):
             for i, tile in enumerate(row):
@@ -75,6 +75,46 @@ class GameMap:
                 new_board[y][x] /= count
 
         return new_board
+
+    def remove_islands(self, board):
+        """
+            Islands create impossible tasks for pathfinding
+        """
+
+        seen_nodes = set([])
+        unique_sets = []
+
+        for j, row in enumerate(board):
+            for i, tile in enumerate(row):
+
+                if (i, j) not in seen_nodes and tile != 2:
+                    seen_nodes.add((i, j))
+                    unique_sets.append([(i, j)])
+                    queue = [(i, j)]
+                    
+                    while queue:
+                        x, y = queue.pop(0)
+
+                        for dir_x, dir_y in [[-1, 0], [1, 0], [0, 1], [0, -1]]:
+                            new_x, new_y = dir_x + x, dir_y + y
+                
+
+                            if new_x in range(len(board[0])) and new_y in range(len(board)) and board[new_y][new_x] != 2 and (new_x, new_y) not in seen_nodes:
+                                seen_nodes.add((new_x, new_y))
+                                queue.append((new_x, new_y))
+                                unique_sets[-1].append((new_x, new_y))
+
+        maxSize = max(list(len(item) for item in unique_sets))
+        unique_sets = filter(lambda tiles: len(tiles) != maxSize, unique_sets)
+
+        for sets in unique_sets:
+            for x, y in sets:
+                board[y][x] = 2
+ 
+
+        return board
+
+
 
     def remove_isolated(self, board, terrain, minimum_amount):
         """
