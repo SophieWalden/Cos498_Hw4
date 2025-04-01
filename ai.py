@@ -155,64 +155,6 @@ class AI:
             if u.rank == "soldier" and not u.general_following:
                 u.choose_general(current_faction.generals)
 
-    def pathplan(self, u, move_cache, gmap):
-        """Given a unit, this func performs A* to make a move_queue to get it its targeted point"""
-
-        if not u.targeted_pos: return
-
-        cache_key = (u.pos.x, u.pos.y, u.targeted_pos[0], u.targeted_pos[1])
-        if cache_key in move_cache and random.random() < 0.9: 
-            self.cache_hit += 1
-            u.move_queue = move_cache[cache_key].copy()
-        else:
-            self.cache_miss += 1
-            seen_nodes = set([(u.pos.x, u.pos.y)])
-            queue = [[u.pos.x, u.pos.y, {"end_pos": u.targeted_pos}]]
-    
-            while queue:
-                x, y, path = queue.pop(queue.index(min(queue, key=lambda pos: random.random() * 10 + abs(pos[0] - u.pos.x) + abs(pos[1] - u.pos.y) + abs(pos[0] - u.targeted_pos[0]) + abs(pos[1] - u.targeted_pos[1]))))
-
-                potential_cache_key = (x, y, u.targeted_pos[0], u.targeted_pos[1])
-                if potential_cache_key in u.move_queue:
-                    additional_moves = u.move_queue[potential_cache_key]
-                    for key, val in additional_moves.items():
-                        path[key] = val
-                    u.move_queue = path
-                    break
-            
-                if x == u.targeted_pos[0] and y == u.targeted_pos[1]:
-                    u.move_queue = path
-                    break
-
-                for name, direction in vec2.MOVES.items():
-                    new_x, new_y = x + direction.x, y + direction.y
-                    new_x %= gmap.width
-                    new_y %= gmap.height
-
-                    if (new_x, new_y) not in seen_nodes and gmap.cells[vec2.Vec2(new_x, new_y)].terrain != cell_terrain.Terrain.Water:
-                        seen_nodes.add((new_x, new_y))
-                        
-                        new_path = path.copy()
-                        new_path[(x, y)] = name
-                        queue.append([new_x, new_y, new_path])
-                    
-            move_cache[cache_key] = u.move_queue.copy()
-            
-            # To speed up computation every point thats pathing to the same point on the path can follow the same path
-            pos = [u.pos.x, u.pos.y]
-            while pos[0] != u.targeted_pos[0] and pos[1] != u.targeted_pos[1]:
-                if (pos[0], pos[1]) not in u.move_queue: break
-                next_move = u.move_queue[(pos[0], pos[1])]
-                move = {"W": [-1, 0], "E": [1, 0], "N": [0, -1], "S": [0, 1]}[next_move]
-                new_x, new_y = pos[0] + move[0], pos[1] + move[1]
-                new_x %= gmap.width
-                new_y %= gmap.height
-
-                pos = [new_x, new_y]
-
-                new_cache_key = (new_x, new_y, u.targeted_pos[0], u.targeted_pos[1]) 
-                move_cache[new_cache_key] = u.move_queue.copy()
-
     def unit_pathfinding(self, current_units, current_cities_pos, cities, move_cache, gmap, faction_id, current_faction):
         unit_commands = {}
         for u in current_units:
@@ -224,11 +166,8 @@ class AI:
                 if pos in u.general_following.flow_field:
                     unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, u.general_following.flow_field[pos])
   
-
             elif u.rank == "commander" and current_cities_pos: # Commander by default goes to closest city defensively
                 u.targeted_pos = min(current_cities_pos, key=lambda pos: (pos[0] - u.pos.x)**2+(pos[1] - u.pos.y)**2)
-
-
 
             if u.ID not in unit_commands:
                 rand_dir = random.choice(list(vec2.MOVES.keys()))

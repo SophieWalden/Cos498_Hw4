@@ -126,3 +126,5 @@ Optimization Tracking:
  Since logic frames are so much quicker then drawing frames on high speeds we can simply simulate multiple logic frames between drawing frames
  This lets us hit a crazy score of 61 rounds / second in a full-scrollable and zoomable sitatuion (with less lag then original A*)
  Even further since the previous logic every round simulation was still bound by the clock, with just so many logic frames inbetween we hit upto 650 rounds / second
+
+ Figure out why get_tile_image has such high profile time?
