@@ -89,3 +89,40 @@ Create a cache for flowfields?
 At the start cache the flowfield for every city for REALLY quick lookup (We onto to good optimizations??)
 
 Commanders are multidefecting by being assigned to general on faction creation
+
+I spent a lot of time using CProfiler to go through the functions and eliminate massive timesinks, some examples include:
+ - Recreating the render queue every time a build structures command was submitted, not just on successful builds (Was happening hundreds time a second -> a couple)
+ - Checking if units overtook cities or structures every move instead of once after all moves have processed
+
+
+GET THESE DOWN (List of how much % of a game it takes up in a 1 minute game):
+ - 11.67 seconds: Pygame font rendering
+ - 10.51 seconds: Pygame surface blitting
+ - 6.8 seconds: draw_map
+ - 5.6 seconds: Pygame transform.scale
+ - 4.6 seconds: get_tile_image
+ - 3.1 seconds: Display.blit (my version of blitting)
+ - 3.1 seconds: Surface.fill
+ - 1.7 seconds: pygame.display.flip
+ - 1.4 seconds: enumerate in general
+ - 1.08 seconds: world_to_cord
+ 
+Total of all of the top 10: 49.56 seconds
+So pretty much 80% of time is spent just rendering, lets try to get that down
+
+Caching of text brought it from 20% of the time -> 0.025%
+
+Ideas:
+ - Caching common rects, especially for text 
+ - Caching scaled images
+
+Optimization Tracking:
+ - Unoptimized: 20 rounds / second
+ - Text caching: 25 rounds / second
+ - Image Caching: 28 rounds / second
+ - Simulating Logic every round, drawing every 512 ticks: 59 rounds / second
+
+ New tech: Alternating rounds
+ Since logic frames are so much quicker then drawing frames on high speeds we can simply simulate multiple logic frames between drawing frames
+ This lets us hit a crazy score of 61 rounds / second in a full-scrollable and zoomable sitatuion (with less lag then original A*)
+ Even further since the previous logic every round simulation was still bound by the clock, with just so many logic frames inbetween we hit upto 650 rounds / second

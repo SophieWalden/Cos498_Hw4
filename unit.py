@@ -73,14 +73,15 @@ class Unit:
 
         self.move_queue = {}
 
-        self.general_accepted_death_threshhold = random.randint(5, 20)
+        self.general_accepted_death_threshhold = random.randint(5, 30)
         self.soldiers_lost, self.soldiers_killed = 0, 0
         self.defecting = False
         self.age_assigned_moves = 0
         self.targeting_age = 0
         self.flow_field = {}
+        self.defected_times = 0
 
-        self.aptitudes = {"gather": random.random(), "conquer": random.random() * 10, "defend": random.random()* 0.2, "gather_materials": {"wood": random.random(), "stone": random.random()}, "conquer_style": {"closest": random.random(), "fewest_enemies": random.random()}}
+        self.aptitudes = {"gather": random.random(), "conquer": random.random(), "defend": 0, "gather_materials": {"wood": random.random(), "stone": random.random()}, "conquer_style": {"closest": random.random(), "fewest_enemies": random.random()}}
 
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""
@@ -161,11 +162,11 @@ class Unit:
 
     def create_flow_field(self, pos, gmap, move_cache):
         if pos in move_cache:
-            return move_cache[pos]
+            self.flow_field = move_cache[pos]
+            return
 
         flow_field = create_flow_field(pos, gmap)
 
-        
         self.flow_field = flow_field
         move_cache[pos[:]] = flow_field
 
