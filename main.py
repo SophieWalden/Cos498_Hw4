@@ -129,11 +129,12 @@ class Display:
                 width += rect[2]
                 height = max(height, rect[3])
 
+            width += 2 * len(surfaces)
             text_surface = pygame.Surface((width, height), pygame.SRCALPHA)
             rect_x = 0
             for (surface, rect) in surfaces:
                 text_surface.blit(surface, (rect_x, 0))
-                rect_x += rect[2]
+                rect_x += rect[2] + 2
         else:
             if msg not in self.text_cache:
                 surface, rect = self.font.render(msg, TEXT_COLOR)
@@ -161,39 +162,37 @@ class Display:
         
         """
         
-        pos_to_left = vec2.Vec2(v.x - 1, v.y)
-        water_to_left = v.x == 0 or gmap.cells[pos_to_left].terrain == cell_terrain.Terrain.Water
-
-        if terrain == cell_terrain.Terrain.Water and not water_to_left:
+        if terrain == cell_terrain.Terrain.Water and (v.x == 0 or gmap.cells[vec2.Vec2(v.x - 1, v.y)].terrain != cell_terrain.Terrain.Water):
             return self.images["water_shaded_top_tile"], "water_shaded_top_tile"
 
         return self.images[TILE_MAP[terrain]], TILE_MAP[terrain]
 
     def draw_map(self, gmap):
         for v, c in gmap.cell_render_queue:
-            image = None
-       
-            if c.terrain not in TILE_MAP: return
+            if self.is_onscreen(v.x, v.y, 50):
+                image = None
+        
+                if c.terrain not in TILE_MAP: return
+                
+                image, tile_name = self.get_tile_image(c.terrain, v, gmap)
+    
             
-            image, tile_name = self.get_tile_image(c.terrain, v, gmap)
- 
-         
-            x, y = self.world_to_cord((v.x, v.y))
-            self.blit(image, x, y, 50, tile_name)
+                x, y = self.world_to_cord((v.x, v.y))
+                self.blit(image, x, y, 50, tile_name)
 
-            # Render animation on top of each tile
-            indexes_to_remove = []
-            for i, (pos, animation, animation_speed) in enumerate(self.queued_animations[(v.x, v.y)]):
-                image, frame_num = animation.get_next_image(animation_speed)
+                # Render animation on top of each tile
+                indexes_to_remove = []
+                for i, (pos, animation, animation_speed) in enumerate(self.queued_animations[(v.x, v.y)]):
+                    image, frame_num = animation.get_next_image(animation_speed)
 
-                self.blit(image, pos[0], pos[1], 50, f"{animation.name}_{frame_num}")
-                if animation.finished: indexes_to_remove.append(i) 
+                    self.blit(image, pos[0], pos[1], 50, f"{animation.name}_{frame_num}")
+                    if animation.finished: indexes_to_remove.append(i) 
 
-            for index in indexes_to_remove[::-1]:
-                self.queued_animations[(v.x, v.y)].pop(index)
+                for index in indexes_to_remove[::-1]:
+                    self.queued_animations[(v.x, v.y)].pop(index)
 
-            if c.owned_by:
-                self.outline_tile(v.x, v.y, self.darken(c.owned_by.color, 2), "structure")
+                if c.owned_by:
+                    self.outline_tile(v.x, v.y, self.darken(c.owned_by.color, 2), "structure")
          
 
             
@@ -207,17 +206,18 @@ class Display:
         for fid, ulist in unit_dict.by_faction.items():
             fcolor = factions[fid].color
             for u in ulist:
-                image = {"P": self.images["paper_unit"], "R": self.images["rock_unit"], "S": self.images["scissor_unit"]}[u.utype]
-                image = image.copy()
-         
-                image.fill(self.darken(fcolor, 0.5), special_flags = pygame.BLEND_RGBA_MULT)
-
-                x, y = u.display_pos
-
                 size = 30
                 if u.rank == "general": size = 50
                 elif u.rank == "commander": size = 70
                 size += u.additional_size
+
+                x, y = u.display_pos
+                if not self.is_onscreen(x, y, size, False): continue
+
+                image = {"P": self.images["paper_unit"], "R": self.images["rock_unit"], "S": self.images["scissor_unit"]}[u.utype]
+                image = image.copy()
+         
+                image.fill(self.darken(fcolor, 0.5), special_flags = pygame.BLEND_RGBA_MULT)
 
                 self.blit(image, x - ((size - 30) // 2), y - ((size - 30)), size, f"{u.utype}_{fid}_{size}")
 
@@ -231,6 +231,8 @@ class Display:
         return (x, y)
 
     def outline_tile(self, x, y, color, type):
+        if not self.is_onscreen(x, y, 50): return
+
         image_name = {"tile": "tile_outline", "structure": "structure_outline"}[type]
 
         x, y = self.world_to_cord((x, y))
@@ -239,6 +241,17 @@ class Display:
         outline.fill(color, special_flags = pygame.BLEND_MULT)
         self.blit(outline, x, y, 50, f"{image_name}_{color[0]}_{color[1]}_{color[2]}")
         
+    
+    def is_onscreen(self, x, y, size, cord_adjustment=True):
+        if cord_adjustment: x,y = x * TILE_X_OFFSET - y * TILE_X_OFFSET, x * TILE_Y_OFFSET + y * TILE_Y_OFFSET
+        
+        adjusted_x = x - self.camera_pos[0]
+        adjusted_y = y - self.camera_pos[1]
+
+        adjusted_x *= self.zoom
+        adjusted_y *= self.zoom
+
+        return adjusted_x > -size * self.zoom and adjusted_x < self.width and adjusted_y > -size * self.zoom and adjusted_y < self.height
 
     def blit(self, image, x, y, size, name=None):
         adjusted_x = x - self.camera_pos[0]
@@ -248,7 +261,7 @@ class Display:
         adjusted_y *= self.zoom       
         
 
-        if adjusted_x > -500 and adjusted_x < self.width and adjusted_y > -500 and adjusted_y < self.height:
+        if adjusted_x > -size * self.zoom and adjusted_x < self.width and adjusted_y > -size * self.zoom and adjusted_y < self.height:
             if name:
                 adjusted_image = self.image_cache.get((name, self.zoom))
 
@@ -341,45 +354,48 @@ class Display:
                     y += 25
 
         elif sidebar_mode == "unit":
-            menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
+            if unit_selected.faction_id in factions:
+                menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
 
-            surface, rect = self.font.render(f"Pos: {unit_selected.pos.x} {unit_selected.pos.y}", TEXT_COLOR)
-            menu_surface.blit(surface, (10, y))
-            y += 25
+                self.draw_text(menu_surface, "Pos:", 10, y, TEXT_COLOR)
+                self.draw_text(menu_surface, str(unit_selected.pos.x), 60, y, TEXT_COLOR)
+                self.draw_text(menu_surface, str(unit_selected.pos.y), 70 + 9 * len(str(unit_selected.pos.x)), y, TEXT_COLOR)
 
-            surface, rect = self.font.render(f"Type: {unit_selected.utype}", TEXT_COLOR)
-            menu_surface.blit(surface, (10, y))
-            y += 25
-
-            surface, rect = self.font.render(f"Rank: {unit_selected.rank}", TEXT_COLOR)
-            menu_surface.blit(surface, (10, y))
-            y += 25
-
-            if unit_selected.targeted_pos:
-                surface, rect = self.font.render(f"Targeting: {unit_selected.targeted_pos[0]} {unit_selected.targeted_pos[1]}", TEXT_COLOR)
-                menu_surface.blit(surface, (10, y))
                 y += 25
 
-            if unit_selected.general_following and unit_selected.general_following.flow_field:
-                pos = (unit_selected.pos.x, unit_selected.pos.y)
+                self.draw_text(menu_surface, "Type:", 10, y, TEXT_COLOR)
+                self.draw_text(menu_surface, str(unit_selected.utype), 70, y, TEXT_COLOR)
+                y += 25
+           
+                self.draw_text(menu_surface, "Rank:", 10, y, TEXT_COLOR)
+                self.draw_text(menu_surface, str(unit_selected.rank), 70, y, TEXT_COLOR)
+                y += 25
 
-                if pos in unit_selected.general_following.flow_field:
-                    current_move = unit_selected.general_following.flow_field[pos]
-                    surface, rect = self.font.render(f"Current move: {current_move}", TEXT_COLOR)
+                if unit_selected.targeted_pos:
+                    surface, rect = self.font.render(f"Targeting: {unit_selected.targeted_pos[0]} {unit_selected.targeted_pos[1]}", TEXT_COLOR)
                     menu_surface.blit(surface, (10, y))
                     y += 25
 
+                if unit_selected.general_following and unit_selected.general_following.flow_field:
+                    pos = (unit_selected.pos.x, unit_selected.pos.y)
 
-            if unit_selected.rank == "commander":
-                goal, subgoal = factions[unit_selected.faction_id].goal
+                    if pos in unit_selected.general_following.flow_field:
+                        current_move = unit_selected.general_following.flow_field[pos]
+                        surface, rect = self.font.render(f"Current move: {current_move}", TEXT_COLOR)
+                        menu_surface.blit(surface, (10, y))
+                        y += 25
 
-                surface, rect = self.font.render(f"Goal: {goal}", TEXT_COLOR)
-                menu_surface.blit(surface, (10, y))
-                y += 25
 
-                surface, rect = self.font.render(f"Subgoal: {subgoal}", TEXT_COLOR)
-                menu_surface.blit(surface, (10, y))
-                y += 25
+                if unit_selected.rank == "commander":
+                    goal, subgoal = factions[unit_selected.faction_id].goal
+
+                    surface, rect = self.font.render(f"Goal: {goal}", TEXT_COLOR)
+                    menu_surface.blit(surface, (10, y))
+                    y += 25
+
+                    surface, rect = self.font.render(f"Subgoal: {subgoal}", TEXT_COLOR)
+                    menu_surface.blit(surface, (10, y))
+                    y += 25
 
         self.screen.blit(menu_surface, ((winw - 200, 10)))
 
@@ -1159,11 +1175,12 @@ def GameLoop(display):
         pygame.display.flip()
 
         if current_turn_time_ms:
-            if flow_field_queue:
+            current_turn_time_ms = time.perf_counter() - current_turn_time_ms
+            if flow_field_queue and (len(move_cache) < 20 or current_turn_time_ms < 0.02):
                 pos = flow_field_queue.pop(0)
-                if pos in move_cache: continue
+                if pos not in move_cache: 
+                    move_cache[pos] = ai.create_flow_field(pos, gmap)
 
-                move_cache[pos] = ai.create_flow_field(pos, gmap)
             
 
         dt = display.clock.tick(60)
