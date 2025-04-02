@@ -75,10 +75,16 @@ class AI:
     # in the main.py file). If you'd like to subclass the AI class
     # to differentiate between faction behaviors, you are welcome
     # to do so.
-    def __init__(self):
+    def __init__(self, fid, color):
         self.cache_hit, self.cache_miss = 0, 0
-        self.system = System()
 
+        # Color based assignment so we can know which color is being controlled how    
+        self.system = BalancedSystem()
+        # if color == (200, 0, 0):
+        #     self.system = DefenceSystem()
+        # else:
+        #     self.system = AggressorSystem()
+    
 
     # run_ai
     # Parameters:
@@ -152,30 +158,33 @@ class AI:
             retVal = current_faction.choose_general(current_units)
             
         for u in current_units:
-            if u.rank == "soldier" and not u.general_following:
+            if u.rank in ["soldier", "commander"] and not u.general_following:
                 u.choose_general(current_faction.generals)
 
-    def unit_pathfinding(self, current_units, current_cities_pos, cities, move_cache, gmap, faction_id, current_faction):
+    def unit_pathfinding(self, current_units, current_cities_pos, cities, move_cache, gmap, faction_id, current_faction, current_structures_pos):
         unit_commands = {}
         for u in current_units:
+            pos = (u.pos.x, u.pos.y)
             if u.general_following:
-                pos = (u.pos.x, u.pos.y)
                 if pos == u.general_following.targeted_pos:
                     u.general_following.targeted_pos = None
 
                 if pos in u.general_following.flow_field:
                     unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, u.general_following.flow_field[pos])
-  
+
+            if u.flow_field:
+                unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, u.flow_field[pos])
+
             elif u.rank == "commander" and current_cities_pos: # Commander by default goes to closest city defensively
                 u.targeted_pos = min(current_cities_pos, key=lambda pos: (pos[0] - u.pos.x)**2+(pos[1] - u.pos.y)**2)
+                
 
-            if u.ID not in unit_commands:
-                rand_dir = random.choice(list(vec2.MOVES.keys()))
-                unit_commands[u.ID] = MoveUnitCommand(faction_id, u.ID, rand_dir)
+            if u.targeted_pos and u.targeted_pos in current_cities_pos or u.targeted_pos in current_structures_pos:
+                u.targeted_pos = None
 
         return unit_commands
 
-    def run_ai(self, faction_id, factions, cities, units, gmap, move_cache):
+    def run_ai(self, faction_id, factions, cities, units, gmap, move_cache, defecting_enabled, unit_dict):
         current_faction, current_units, current_cities, current_cities_pos, current_units_pos, total_cities, current_structures_pos = self.preturn_information(units, cities, faction_id, factions)
 
         # Upkeep of management system
@@ -188,25 +197,48 @@ class AI:
 
         # Constructing and returning all of the commands
         cmds = []
-        for (city_id, utype) in self.system.build_units_queue:
-            cmds.append(BuildUnitCommand(faction_id, city_id, utype))
+        for (city_id, utype, upgrades) in self.system.build_units_queue:
+            cmds.append(BuildUnitCommand(faction_id, city_id, utype, upgrades))
 
         for (pos, building_type) in self.system.build_structures_queue:
             cmds.append(BuildStructureCommand(faction_id, current_faction, pos, building_type))
         
-        for uid, cmd in self.unit_pathfinding(current_units, current_cities_pos, cities, move_cache, gmap, faction_id, current_faction).items():
+        for uid, cmd in self.unit_pathfinding(current_units, current_cities_pos, cities, move_cache, gmap, faction_id, current_faction, current_structures_pos).items():
             cmds.append(cmd)
 
         for u in current_units:
-            if u.defecting:
+            if defecting_enabled and u.defecting:
                 cmds.append(DefectCommand(faction_id, current_faction, u))
                 u.defecting = False
 
         return cmds, move_cache
 
 
-class System:
+class AggressorSystem:
     def __init__(self):
+        """It doesn't care what its soldiers, generals, or even the commander thinks, all the aggressor wants is to send units towards enemy cities"""
+        self.build_units_queue = []
+        self.build_structures_queue = []
+
+    def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache):        
+        for general in current_faction.generals:
+            if not general.targeted_pos and total_cities != len(current_cities):
+                general.choose_targeted_city(cities, factions, current_faction.goal[1], gmap, move_cache)
+                general.targeting_age = current_faction.age
+
+            if total_cities == len(current_cities):
+                general.choose_targeted_unit(units, gmap, move_cache) 
+                general.targeting_age = current_faction.age
+
+        for ci in list(range(len(current_cities))):
+            self.build_units_queue.append((current_cities[ci].ID, random.choice(['R', 'S', 'P']), {"wood": current_faction.materials["wood"]//4, "stone": current_faction.materials['stone']//4}))
+
+
+
+
+class BalancedSystem:
+    def __init__(self):
+        """Base system showing off both the capability to take cities and gather materials, but doesn't have any great strategy"""
         self.build_units_queue = []
         self.build_structures_queue = []
 
@@ -218,13 +250,8 @@ class System:
             if general.targeting_age + 40 < current_faction.age:
                 general.targeted_pos = None
 
-            if general.targeted_pos and general.targeted_pos in current_structures_pos:
-                general.targeted_pos = None
 
-        
-
-            
-        can_buy = True
+        can_buy = False
         if current_faction.goal[0] == "gather":
             if current_faction.goal[1] == "wood" and current_faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]):
                 can_buy = True
@@ -256,9 +283,9 @@ class System:
                 
         city_indexes = list(range(len(current_cities)))
 
-        if current_faction.goal[0] in ["conquer", "defend"]:
+        if current_faction.goal[0] != "gather" or random.random() > 0.8:
             for ci in city_indexes:
-                self.build_units_queue.append((current_cities[ci].ID, random.choice(['R', 'S', 'P'])))
+                self.build_units_queue.append((current_cities[ci].ID, random.choice(['R', 'S', 'P']), {"wood": current_faction.materials["wood"]//10, "stone": current_faction.materials['stone']//10}))
 
         for u in current_units:
             if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest and current_faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]):
@@ -266,3 +293,28 @@ class System:
 
             if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Stone and current_faction.can_build_structure(params.STRUCTURE_COST["miner"]):
                 self.build_structures_queue.append(((u.pos.x, u.pos.y), "miner"))
+
+
+class DefenceSystem:
+    def __init__(self):
+        """Showcases a turtling effect to maintain cities"""
+        self.build_units_queue = []
+        self.build_structures_queue = []
+
+    def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache):
+   
+        def dist(x1, y1, x2, y2):
+            return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** .5
+
+        city_strength = {}
+        for ci in range(len(current_cities)):
+            city = current_cities[ci] 
+            city_strength[ci] = sum(dist(city.pos.x, city.pos.y, unit.pos.x, unit.pos.y) < 4 for unit in current_units)
+
+        cities_sorted = sorted(city_strength.keys(), key=lambda x: city_strength[x])
+
+        cost = unit.UNIT_COSTS["R"]
+        while cities_sorted and current_faction.materials["gold"] >= cost:
+            ci = cities_sorted.pop(0)
+            self.build_units_queue.append((current_cities[ci].ID, random.choice(['R', 'S', 'P']), {"wood": 0, "stone": 0}))
+

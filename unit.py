@@ -42,7 +42,7 @@ def get_unit_cost(utype):
 TILE_X_OFFSET = 24
 TILE_Y_OFFSET = 12
 class Unit:
-    def __init__(self, ID, utype, faction_id, pos, health, sight_radius):
+    def __init__(self, ID, utype, faction_id, pos, health, sight_radius, damage_buff):
 
         # id: int
         self.ID = ID
@@ -61,6 +61,7 @@ class Unit:
 
         # health: int
         self.health = health
+        self.damage_buff = damage_buff
 
         # sight_radius: int - how far it sees
         # NOT USED.

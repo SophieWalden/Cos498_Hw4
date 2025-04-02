@@ -11,10 +11,11 @@ class MoveUnitCommand(Command):
         self.direction = direction       
 
 class BuildUnitCommand(Command):
-    def __init__(self, faction_id, city_id, utype):
+    def __init__(self, faction_id, city_id, utype, upgrade_materials={}):
         Command.__init__(self, faction_id)
         self.city_id = city_id
         self.utype = utype
+        self.upgrade_materials = upgrade_materials
 
 class BuildStructureCommand(Command):
     def __init__(self, faction_id, faction, position, utype):

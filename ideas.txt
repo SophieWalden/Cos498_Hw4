@@ -127,4 +127,15 @@ Optimization Tracking:
  This lets us hit a crazy score of 61 rounds / second in a full-scrollable and zoomable sitatuion (with less lag then original A*)
  Even further since the previous logic every round simulation was still bound by the clock, with just so many logic frames inbetween we hit upto 650 rounds / second
 
- Figure out why get_tile_image has such high profile time?
+Added a system where factions can spend materials when building to get buffs on their units, wood is offensive and stone is defensive.
+Stat wise you get the most buffs from the earliest spending breakpoints, so getting a passive generation to put 20 stone and wood into your units will make battles 70 30 against non upgraded units
+
+NOW FINALLY that I have the engine built, all of the commands, the custom terrain, and it abstracted away into systems I can now finally start working on different AIs
+
+
+System Creation Notes:
+If we think of late strategist like Vauban (I'm pulling half of this from Ender's Shadow) we think of the defense problem
+As you try to defend further away from the city you have to employ more troops, making it way easier to attack then simply defend. 
+Even if you defend one city and the enemy has 3 they have more resources and can whittle you down.
+This means you have to make formations to defend your current city while having enough troops to not be to far down in city count overall
+

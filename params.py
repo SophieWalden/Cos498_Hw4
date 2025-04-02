@@ -13,25 +13,7 @@ import random
 # is completely random. There's no fancy procedural content gen.
 # algorithms here. If you want something fancier, you'd need
 # to add them below and call them in game_map.py.
-CELL_TERRAIN_PROBABILITY = {
-    cell_terrain.Terrain.Forest: 1,
-    cell_terrain.Terrain.Open: 4
-    }
 
-TERRAINS = list(CELL_TERRAIN_PROBABILITY.keys())
-PROBS = list(CELL_TERRAIN_PROBABILITY.values())
-TOTAL = sum(PROBS)
-
-running_sum = 0
-for i, p in enumerate(PROBS):
-    PROBS[i] = (p+running_sum)/TOTAL
-    running_sum += p
-    
-def get_random_terrain(roll):
-    for i, p in enumerate(PROBS):
-        if roll <= p:
-            return TERRAINS[i]
-    #print(roll)
     
 # ##########################################################33
 # FACTION STUFF
@@ -39,22 +21,27 @@ def get_random_terrain(roll):
 # How much money does a city generate per turn?
 CITY_INCOME = 3
 
+# How many starting factions in the game?
+FACTIONS_COUNT = 6
+
 # How many cities does each faction start with?
-CITIES_PER_FACTION = 2
+CITIES_PER_FACTION = 3
 
 # How much money does a faction start with?
 STARTING_FACTION_MONEY = 500
 
+MODE = "nature" # versus or nature determines whether defecting is allowed
+
 # How much money do structures cost?
 STRUCTURE_COST = {
-    "woodcutter": {"gold": 150},
-    "miner": {"gold": 30, "wood": 10}
+    "woodcutter": {"gold": 250},
+    "miner": {"gold": 50, "wood": 30}
 }
 
 # What do structures give every turn?
 STRUCTURE_OUTPUT = {
     "woodcutter": {"wood": 1},
-    "miner": {"stone": 1, "gold": 1}
+    "miner": {"stone": 1}
 }
 
 # The rest of this is used to give the cities random

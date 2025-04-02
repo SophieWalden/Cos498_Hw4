@@ -27,10 +27,10 @@ from collections import OrderedDict
 # the look and feel (add sprites or something) you probably don't need
 # to mess with anything in this section
 # ####################################################################
-global TILE_X_OFFSET, TILE_Y_OFFSET
 TILE_X_OFFSET = 24
 TILE_Y_OFFSET = 12
 IMAGE_SIZE = 50
+MODE = params.MODE
 
 class LRUCache:
     def __init__(self, max_size=250):
@@ -219,7 +219,7 @@ class Display:
          
                 image.fill(self.darken(fcolor, 0.5), special_flags = pygame.BLEND_RGBA_MULT)
 
-                self.blit(image, x - ((size - 30) // 2), y - ((size - 30)), size, f"{u.utype}_{fid}_{size}")
+                self.blit(image, x - ((size - 30) // 2), y - ((size - 30)), size, f"{u.utype}_{fcolor[0]}_{fcolor[1]}_{fcolor[2]}_{size}")
 
 
 
@@ -354,8 +354,8 @@ class Display:
                     y += 25
 
         elif sidebar_mode == "unit":
+            menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
             if unit_selected.faction_id in factions:
-                menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
 
                 self.draw_text(menu_surface, "Pos:", 10, y, TEXT_COLOR)
                 self.draw_text(menu_surface, str(unit_selected.pos.x), 60, y, TEXT_COLOR)
@@ -369,6 +369,14 @@ class Display:
            
                 self.draw_text(menu_surface, "Rank:", 10, y, TEXT_COLOR)
                 self.draw_text(menu_surface, str(unit_selected.rank), 70, y, TEXT_COLOR)
+                y += 25
+
+                self.draw_text(menu_surface, "Health:", 10, y, TEXT_COLOR)
+                self.draw_text(menu_surface, str(unit_selected.health), 90, y, TEXT_COLOR)
+                y += 25
+
+                self.draw_text(menu_surface, "Damage:", 10, y, TEXT_COLOR)
+                self.draw_text(menu_surface, str(unit_selected.damage_buff), 90, y, TEXT_COLOR)
                 y += 25
 
                 if unit_selected.targeted_pos:
@@ -504,14 +512,14 @@ def gen_factions(gmap):
 
     factions = {}
     chosen_names = []
-    while len(factions) != 7:
+    while len(factions) != params.FACTIONS_COUNT:
         name = get_faction_name(chosen_names)
         chosen_names.append(name)
 
         _, color = POSSIBLE_FACTIONS[len(factions)]
         factions[name] = faction.Faction(
             name, params.STARTING_FACTION_MONEY,
-            ai.AI(), color, len(factions) * 999999999, name
+            ai.AI(name, color), color, len(factions) * 999999999, name
         )
   
     return factions
@@ -586,11 +594,11 @@ def FactionPreTurn(cities, faction):
 # Turn:
 # The actual turn taking function. Calls each faction's ai
 # Gathers all the commands in a giant list and returns it.
-def Turn(factions, gmap, cities_by_faction, units_by_faction, move_cache):
+def Turn(factions, gmap, cities_by_faction, units_by_faction, move_cache, unit_dict):
     commands = []
 
     for fid, f in factions.items():
-        cmds, move_cache = f.run_ai(factions, cities_by_faction, units_by_faction, gmap, move_cache) 
+        cmds, move_cache = f.run_ai(factions, cities_by_faction, units_by_faction, gmap, move_cache, MODE != "versus", unit_dict) 
         commands.extend(cmds)
 
     return commands, move_cache
@@ -662,7 +670,7 @@ def RunDefectCommand(cmd, factions, unit_dict):
 
     factions[name] = Faction(
         name, params.STARTING_FACTION_MONEY,
-        ai.AI(), color, len(factions) * 999999999, name, general
+        ai.AI(name, color), color, len(factions) * 999999999, name, general
     )
     new_unit_list = []
     units_to_remove_index = []
@@ -801,6 +809,7 @@ def RunBuildCommand(cmd, factions, unit_dict, cities, gmap):
     # How much does the unit cost?
     f = factions[cmd.faction_id]
     cost = unit.get_unit_cost(cmd.utype)
+    materials = cmd.upgrade_materials
 
 
 
@@ -812,13 +821,22 @@ def RunBuildCommand(cmd, factions, unit_dict, cities, gmap):
             # Add to the unit dictionary and charge
             # the faction for its purchase.
             if unit_dict.is_pos_free(c.pos) and f.can_build_unit(cost):
+                
+                health_buffs, damage_buff = 0, 0
+                if f.can_build_structure({"wood": materials["wood"]}):
+                    damage_buff += int(materials["wood"]**0.5 + math.log1p(materials["wood"]))
+                    f.materials["wood"] -= materials['wood']
+
+                if f.can_build_structure({"stone": materials["stone"]}):
+                    health_buffs = int(materials["stone"]**0.5 +  math.log1p(materials["stone"]))
+                    f.materials["stone"] -= materials['stone']
 
                 uid = f.get_next_unit_id()
                 new_unit = unit.Unit(uid, cmd.utype,
                                         f.ID,
                                         copy.copy(c.pos),
-                                        unit.UNIT_HEALTH[cmd.utype],
-                                        0)
+                                        unit.UNIT_HEALTH[cmd.utype] + health_buffs,
+                                        0, damage_buff)
                 unit_dict.add_unit(new_unit)
 
                 f.materials["gold"] -= cost
@@ -839,8 +857,8 @@ def RunCombat(attacker, defender, cmd, factions, unit_dict, cities, gmap):
     def_cell = gmap.get_cell(defender.pos)
 
     # Make the combat rolls.
-    att_roll = attacker.roll(defender.utype)
-    def_roll = defender.roll(attacker.utype)
+    att_roll = attacker.roll(defender.utype) + attacker.damage_buff
+    def_roll = defender.roll(attacker.utype) + defender.damage_buff
 
     # Add terrain modifiers.
     att_roll += att_cell.get_attack_mod()
@@ -928,7 +946,7 @@ def handle_mouse_functions(offset, zoom):
 
 import time
 
-def post_turn_takeovers(cities, unit_dict, factions, gmap):
+def post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures):
     for c in cities:
         if c.pos in unit_dict.by_pos:
             unit = unit_dict.by_pos[c.pos]
@@ -949,18 +967,15 @@ def post_turn_takeovers(cities, unit_dict, factions, gmap):
         for index in indexes_to_remove[::-1]:
             faction.structures.pop(index)
 
+    for structure in empty_structures:
+        if structure.pos in unit_dict.by_pos:
+            unit = unit_dict.by_pos[structure.pos]
+            structure.owned_by = factions[unit.faction_id]
+
 
 
 def GameLoop(display):
-    global TILE_X_OFFSET, TILE_Y_OFFSET
-    
     winw, winh = pygame.display.get_window_size()
-
-    # Width and Height (in cells) of the game map. If you want
-    # a bigger/smaller map you will need to coordinate these values
-    # with two other things.
-    # - The window size below in main().
-    # - The map_cell_size given in the Display class above.
     gmap = gen_game_map(50, 50)
     move_cache = {}
     
@@ -979,11 +994,11 @@ def GameLoop(display):
         if c.terrain in (cell_terrain.Terrain.Forest, cell_terrain.Terrain.Stone):
             flow_field_queue.append((v.x, v.y))
 
-    def run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities):
+    def run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures):
         commands, move_cache = Turn(factions, gmap, cities_by_faction,
-                                    unit_dict.by_faction, move_cache)
+                                    unit_dict.by_faction, move_cache, unit_dict)
         combat_positions, building_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
-        post_turn_takeovers(cities, unit_dict, factions, gmap)
+        post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures)
 
         return move_cache, combat_positions, building_positions
 
@@ -997,6 +1012,7 @@ def GameLoop(display):
     selected_unit = None
     dragging, hover = False, False
     desired_scroll = display.zoom
+    empty_structures = []
     all_stats = {}
     while display.run:
         pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
@@ -1013,7 +1029,7 @@ def GameLoop(display):
                     # Lower if you want a faster game speed.
                     
                     speed = speed / 2
-                    speed = max(speed, 16)
+                    speed = max(speed, 32)
                 elif event.key == pygame.K_RIGHT:
 
                     # Increase if you want a slower game speed.
@@ -1086,6 +1102,7 @@ def GameLoop(display):
                 if len(faction_cities) == 0 and len(unit_dict.by_faction[fid]) == 0:
                     for structure in f.structures:
                         structure.owned_by = None
+                        empty_structures.append(structure)
                     
                     delete_factions.append(fid)
             
@@ -1094,16 +1111,21 @@ def GameLoop(display):
                 del unit_dict.by_faction[fid]
 
 
-            move_cache, combat_positions, building_positions = run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities)
+            move_cache, combat_positions, building_positions = run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures)
             
             turn += 1
 
             game_over = CheckForGameOver(cities, unit_dict)
             if game_over[0]:
+                defecting_count = 10
                 for unit in unit_dict.by_faction[game_over[1]]:
-                    if unit.rank == "general": unit.defecting = True
-                # print(f"Winning faction: {game_over[1]}")
-                # GAME_OVER = True
+                    if unit.rank == "general" and defecting_count: 
+                        defecting_count -= 1
+                        unit.defecting = True
+                
+                if MODE == "versus":
+                    print(f"Winning faction: {game_over[1]}")
+                    GAME_OVER = True
 
 
         # Move units toward their directed pos so they don't move by teleportation
@@ -1196,13 +1218,13 @@ def main(display=None):
     if not display:
         display = init_display(winw, winh)
 
-    profiler = cProfile.Profile()
-    profiler.enable()
+    # profiler = cProfile.Profile()
+    # profiler.enable()
 
     GameLoop(display)
 
-    profiler.disable()
-    profiler.print_stats(sort='tottime')  
+    # profiler.disable()
+    # profiler.print_stats(sort='tottime')  
 
     main(display)
 
