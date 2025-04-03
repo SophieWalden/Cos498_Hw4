@@ -39,8 +39,8 @@ class Faction:
         return can_build
         
     # ################################################################
-    def run_ai(self, factions, cities, units, gmap, move_cache, defecting_enabled, unit_dict):
-        return self.ai.run_ai(self.ID, factions, cities, units, gmap, move_cache, defecting_enabled, unit_dict)
+    def run_ai(self, factions, cities, units, gmap, move_cache, defecting_enabled, unit_dict, top_models):
+        return self.ai.run_ai(self.ID, factions, cities, units, gmap, move_cache, defecting_enabled, unit_dict, top_models)
 
     def choose_commander(self, units):
         if not units: return None

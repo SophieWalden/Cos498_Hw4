@@ -14,6 +14,9 @@ import random
 # algorithms here. If you want something fancier, you'd need
 # to add them below and call them in game_map.py.
 
+
+
+MODE = "versus" # versus or nature determines whether defecting is allowed
     
 # ##########################################################33
 # FACTION STUFF
@@ -22,15 +25,15 @@ import random
 CITY_INCOME = 3
 
 # How many starting factions in the game?
-FACTIONS_COUNT = 6
-
-# How many cities does each faction start with?
-CITIES_PER_FACTION = 3
+if MODE == "nature":
+    FACTIONS_COUNT = 8
+    CITIES_PER_FACTION = 2
+elif MODE == "versus":
+    FACTIONS_COUNT = 2
+    CITIES_PER_FACTION = 6
 
 # How much money does a faction start with?
 STARTING_FACTION_MONEY = 500
-
-MODE = "nature" # versus or nature determines whether defecting is allowed
 
 # How much money do structures cost?
 STRUCTURE_COST = {

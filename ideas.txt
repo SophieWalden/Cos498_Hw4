@@ -139,3 +139,27 @@ As you try to defend further away from the city you have to employ more troops, 
 Even if you defend one city and the enemy has 3 they have more resources and can whittle you down.
 This means you have to make formations to defend your current city while having enough troops to not be to far down in city count overall
 
+
+
+GANNS, attached to generals who inputs are:
+ - Percentage of troop health
+ - Percentage of cities owned
+ - Distance to nearest ally city
+ - Distance to neareest enemy city
+ - Can buy structure, 1 or 0 
+
+ Outputs are:
+  - Move towards the nearest ally city
+  - Move towards nearest enemy city
+  - Move towards nearest resource
+  - Defend current location
+
+
+
+Some of my coolest observations from watching the AI "Learn":
+ - At some point thy figured out that standing still for 30 turns would kill them
+  - There was a general that figured out how to wiggle back and forth to stop turndeath
+ - At first there was no penalty to losing cities since in an army of many generals who do you attribute the lost to
+  - Enemy generals would wiggle back and forth together to lose then reclaim cities
+
+Gotten up to 75% winrate across 40 games versus the default Aggressor system

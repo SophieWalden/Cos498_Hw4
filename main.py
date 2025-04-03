@@ -594,11 +594,11 @@ def FactionPreTurn(cities, faction):
 # Turn:
 # The actual turn taking function. Calls each faction's ai
 # Gathers all the commands in a giant list and returns it.
-def Turn(factions, gmap, cities_by_faction, units_by_faction, move_cache, unit_dict):
+def Turn(factions, gmap, cities_by_faction, units_by_faction, move_cache, unit_dict, top_models):
     commands = []
 
     for fid, f in factions.items():
-        cmds, move_cache = f.run_ai(factions, cities_by_faction, units_by_faction, gmap, move_cache, MODE != "versus", unit_dict) 
+        cmds, move_cache = f.run_ai(factions, cities_by_faction, units_by_faction, gmap, move_cache, MODE != "versus", unit_dict, top_models) 
         commands.extend(cmds)
 
     return commands, move_cache
@@ -680,7 +680,9 @@ def RunDefectCommand(cmd, factions, unit_dict):
             new_unit_list.append(unit)
             unit.faction_id = name
             unit.move_queue = {}
+            unit.creation_age = 0
 
+    general.creation_age = 0
     general.rank = "commander"
     if general in current_faction.generals: current_faction.generals.remove(general)
     for index in units_to_remove_index[::-1]:
@@ -783,20 +785,41 @@ def RunMoveCommand(cmd, factions, unit_dict, cities, gmap, move_list):
                 unit_dict.move_unit(u, old_pos, new_pos)
                 move_successful = True
             
-                # This commander had another unit die
-                if other_unit.faction_id in factions and factions[other_unit.faction_id].commander:
-                    factions[other_unit.faction_id].commander.soldiers_lost += 1
-                
-                if factions[theunit.faction_id].commander:
-                    factions[theunit.faction_id].commander.soldiers_killed += 1 
+               
 
             if theunit.health <= 0:
                 combat_pos = theunit.pos
                 theunit.dead = True
+
+                # This commander had another unit die
+                if other_unit.faction_id in factions and factions[other_unit.faction_id].commander:
+                    factions[other_unit.faction_id].commander.soldiers_killed += 1
+
+                if other_unit.general_following:
+                    other_unit.general_following.soldiers_killed += 1
+                
+                if theunit.general_following:
+                    theunit.general_following.soldiers_lost += 1
+
+                if factions[theunit.faction_id].commander:
+                    factions[theunit.faction_id].commander.soldiers_lost += 1 
             
             if other_unit.health <= 0:
                 other_unit.dead = True
         
+                 # This commander had another unit die
+                if other_unit.faction_id in factions and factions[other_unit.faction_id].commander:
+                    factions[other_unit.faction_id].commander.soldiers_lost += 1
+
+                if other_unit.general_following:
+                    other_unit.general_following.soldiers_lost += 1
+                
+                if theunit.general_following:
+                    theunit.general_following.soldiers_killed += 1
+                
+                if factions[theunit.faction_id].commander:
+                    factions[theunit.faction_id].commander.soldiers_killed += 1 
+
     # Check if the move conquerored a city
     if move_successful:
         theunit.moving = True
@@ -837,6 +860,7 @@ def RunBuildCommand(cmd, factions, unit_dict, cities, gmap):
                                         copy.copy(c.pos),
                                         unit.UNIT_HEALTH[cmd.utype] + health_buffs,
                                         0, damage_buff)
+                new_unit.creation_age = f.age
                 unit_dict.add_unit(new_unit)
 
                 f.materials["gold"] -= cost
@@ -879,10 +903,17 @@ def RunCombat(attacker, defender, cmd, factions, unit_dict, cities, gmap):
         #print(f"   {defender.faction_id} died")
         unit_dict.remove_unit(defender)
         can_move = True
+
+        if defender.general_following and defender in defender.general_following.soldiers_commanding:
+            defender.general_following.soldiers_commanding.remove(defender)
+
     if attacker.health <= 0:
         #print(f"   {attacker.faction_id} died")
         unit_dict.remove_unit(attacker)
         can_move = False
+
+        if attacker.general_following and attacker in attacker.general_following.soldiers_commanding:
+            attacker.general_following.soldiers_commanding.remove(attacker)
 
     return can_move
             
@@ -948,9 +979,17 @@ import time
 
 def post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures):
     for c in cities:
-        if c.pos in unit_dict.by_pos:
+        if c.pos in unit_dict.by_pos and c.faction_id != unit_dict.by_pos[c.pos].faction_id:
+            for general in factions[c.faction_id].generals:
+                general.cities_lost += 1
+            
             unit = unit_dict.by_pos[c.pos]
             c.faction_id = unit.faction_id
+
+            if unit.general_following:
+                unit.general_following.cities_gained += 1
+
+            
 
     for fid, faction in factions.items():
         indexes_to_remove = []
@@ -973,6 +1012,16 @@ def post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures):
             structure.owned_by = factions[unit.faction_id]
 
 
+def kill(unit, unit_dict):
+    unit.dead = True
+
+    unit_dict.remove_unit(unit)
+
+    if unit.general_following:
+        if unit in unit.general_following.soldiers_commanding: unit.general_following.soldiers_commanding.remove(unit)
+        unit.general_following.soldiers_lost += 1
+    
+
 
 def GameLoop(display):
     winw, winh = pygame.display.get_window_size()
@@ -994,9 +1043,9 @@ def GameLoop(display):
         if c.terrain in (cell_terrain.Terrain.Forest, cell_terrain.Terrain.Stone):
             flow_field_queue.append((v.x, v.y))
 
-    def run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures):
+    def run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures, top_models):
         commands, move_cache = Turn(factions, gmap, cities_by_faction,
-                                    unit_dict.by_faction, move_cache, unit_dict)
+                                    unit_dict.by_faction, move_cache, unit_dict, top_models)
         combat_positions, building_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
         post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures)
 
@@ -1004,7 +1053,7 @@ def GameLoop(display):
 
     # Starting game speed (real time between turns) in milliseconds.
     current_turn_time_ms = 0
-    speed = 512
+    speed = 8
     ticks = 0
     turn = 1
     GAME_OVER = False
@@ -1014,6 +1063,7 @@ def GameLoop(display):
     desired_scroll = display.zoom
     empty_structures = []
     all_stats = {}
+    top_models = []
     while display.run:
         pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
         for event in pygame.event.get():
@@ -1029,7 +1079,7 @@ def GameLoop(display):
                     # Lower if you want a faster game speed.
                     
                     speed = speed / 2
-                    speed = max(speed, 32)
+                    speed = max(speed, 8)
                 elif event.key == pygame.K_RIGHT:
 
                     # Increase if you want a slower game speed.
@@ -1091,7 +1141,7 @@ def GameLoop(display):
         display.screen.fill("#121212")
 
         started_turn = turn
-        while ticks >= speed and not GAME_OVER and turn - started_turn < 100:
+        while ticks >= speed and not GAME_OVER and turn - started_turn < 200:
             ticks -= speed
             cities_by_faction = {}
             delete_factions = []
@@ -1111,7 +1161,7 @@ def GameLoop(display):
                 del unit_dict.by_faction[fid]
 
 
-            move_cache, combat_positions, building_positions = run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures)
+            move_cache, combat_positions, building_positions = run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures, top_models)
             
             turn += 1
 
@@ -1126,7 +1176,34 @@ def GameLoop(display):
                 if MODE == "versus":
                     print(f"Winning faction: {game_over[1]}")
                     GAME_OVER = True
+                    return factions[game_over[1]].color
 
+
+            kill_list = []
+            for fid, ulist in unit_dict.by_faction.items():
+                for u in ulist:
+
+                    # If a unit stays still for 30 rounds they die
+                    if u.last_pos and u.last_pos == u.pos:
+                        u.stuck_rounds += 1
+                    else:
+                        u.stuck_rounds = 0
+
+                    if u.stuck_rounds > 30 or factions[fid].age - u.creation_age > 1000:
+                        kill_list.append(u)
+                    else:
+                        u.last_pos = u.pos
+
+            for unit in kill_list:
+                kill(unit, unit_dict)
+
+            if turn % 1000 == 0 and params.MODE == "nature":
+                print(f"Turn {turn} models:")
+                for i, (score, model, stats) in enumerate(top_models):
+                    print(f"Rank {i+1}: {score} kills: {stats.kills} losses: {stats.losses} cities gained: {stats.cities} cities lost: {stats.cities_lost} age: {stats.age}")
+
+                if turn % 1000 == 0 and not top_models[0][1].saved:
+                    top_models[0][1].save(f"models/model_turn{turn}.npz")
 
         # Move units toward their directed pos so they don't move by teleportation
         hover = False
@@ -1203,7 +1280,8 @@ def GameLoop(display):
                 if pos not in move_cache: 
                     move_cache[pos] = ai.create_flow_field(pos, gmap)
 
-            
+        
+
 
         dt = display.clock.tick(60)
         ticks += dt
@@ -1211,6 +1289,7 @@ def GameLoop(display):
         current_turn_time_ms = time.perf_counter()
 
 
+from collections import defaultdict
 def main(display=None):
     random.seed(None)
     winw, winh = 1400, 800
@@ -1221,12 +1300,15 @@ def main(display=None):
     # profiler = cProfile.Profile()
     # profiler.enable()
 
-    GameLoop(display)
+    record = defaultdict(lambda: 0)
+    while True:
+        winner = GameLoop(display)
 
+        record[winner] += 1
+        print(record)
     # profiler.disable()
     # profiler.print_stats(sort='tottime')  
 
-    main(display)
 
 
 if __name__ == "__main__":

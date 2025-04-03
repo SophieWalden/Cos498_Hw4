@@ -60,7 +60,7 @@ class Unit:
         self.moving = False
 
         # health: int
-        self.health = health
+        self.health, self.maxhealth = health, health
         self.damage_buff = damage_buff
 
         # sight_radius: int - how far it sees
@@ -76,6 +76,7 @@ class Unit:
 
         self.general_accepted_death_threshhold = random.randint(5, 30)
         self.soldiers_lost, self.soldiers_killed = 0, 0
+        self.cities_lost, self.cities_gained = 0, 0
         self.defecting = False
         self.age_assigned_moves = 0
         self.targeting_age = 0
@@ -83,6 +84,15 @@ class Unit:
         self.defected_times = 0
 
         self.aptitudes = {"gather": random.random(), "conquer": random.random(), "defend": 0, "gather_materials": {"wood": random.random(), "stone": random.random()}, "conquer_style": {"closest": random.random(), "fewest_enemies": random.random()}}
+        
+        self.soldiers_commanding = []
+        self.NNModel = None
+
+        self.creation_age = 0
+
+        self.last_pos = None
+        self.stuck_rounds = 0
+        self.cities_lost = 0
 
     def world_to_cord(self, pos):
         """Translates 2D array cords into cords for isometric rendering"""
@@ -122,16 +132,18 @@ class Unit:
         if len(available_cities) == 0: return None
 
         if decisionType == "closest": chosen_city = min(available_cities, key=lambda city: abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y))
+        elif decisionType == "furthest": chosen_city = max(available_cities, key=lambda city: abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y))
         else: chosen_city = min(available_cities, key=lambda city: (units_by_faction[city.faction_id], abs(city.pos.x - self.pos.x) + abs(city.pos.y - self.pos.y)))
 
-        self.targeted_pos = (chosen_city.pos.x, chosen_city.pos.y)
-        self.create_flow_field(self.targeted_pos, gmap, move_cache)
+        return (chosen_city.pos.x, chosen_city.pos.y)
 
     def choose_general(self, generals):
         if len(generals) == 0: return None
 
         chosen_general = min(generals, key=lambda general: abs(general.pos.x - self.pos.x) + abs(general.pos.y - self.pos.y))
         self.general_following = chosen_general
+        
+        chosen_general.soldiers_commanding.append(self)
 
     def choose_target_terrain(self, gmap, terrain_types, move_cache):
         minimum_distance = 9999
