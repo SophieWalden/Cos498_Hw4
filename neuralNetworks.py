@@ -3,14 +3,18 @@ import random
 import time
 
 class Model:
-    def __init__(self):
-        self.layer_size = [8, 32, 16, 8, 4]
-        self.activation_functions = [None, "ReLU", "ReLU", "ReLU", "Softmax"]
+    def __init__(self, parents=[]):
+        self.layer_size = [9, 16, 8, 4]
+        self.activation_functions = [None, "ReLU", "ReLU", "Softmax"]
         self.saved = False
 
         self.weights = {}
         self.biases = {}
         self.nodes = []
+        self.chosen_percentage = {0: 0, 1: 0, 2: 0, 3: 0}
+        self.chosen_count = 0
+        self.id = random.randint(0, 100000000)
+        self.parents = parents
 
         self.setup_architecture()
         
@@ -52,15 +56,16 @@ class Model:
         for j, layer in enumerate(self.weights):
             for i, node in enumerate(layer):
                 for k, connection in enumerate(node):
-                    if random.random() < 0.5:
-                        self.weights[j][i][k] += (random.random() * 2 - 1) * 0.3
+                    if random.random() < 0.1:
+                        self.weights[j][i][k] += (random.random() * 2 - 1) * 0.1
                     
         for j, layer in enumerate(self.biases):
             for i, node in enumerate(layer):
-                self.biases[j][i] += (random.random() * 2 - 1) * 0.3
+                if random.random() < 0.1:
+                    self.biases[j][i] += (random.random() * 2 - 1) * 0.1
 
     def crossover(self, parent2):
-        baby = Model()
+        baby = Model(parents=[self.id, parent2.id])
 
         for i in range(len(self.weights)):
             if random.random() < 0.5:

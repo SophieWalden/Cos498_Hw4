@@ -77,17 +77,24 @@ class AI:
     # in the main.py file). If you'd like to subclass the AI class
     # to differentiate between faction behaviors, you are welcome
     # to do so.
-    def __init__(self, fid, color):
+    def __init__(self, fid, color, starting_model=None):
         self.cache_hit, self.cache_miss = 0, 0
 
         # Color based assignment so we can know which color is being controlled how    
 
         if params.MODE == "nature":
-            self.system = GANNSystem()
-        else:
-
+           
             if color == (200, 0, 0):
-                self.system = GANNSystem("./models/model_saved/model_turn35000.npz")
+                self.system = GANNSystem()
+            else:
+                self.system = AggressorSystem()
+          
+        else:
+            
+            if starting_model:
+                self.system = GANNSystem(starting_model)
+            elif color == (200, 0, 0):
+                self.system = GANNSystem("./models/model_23.npz")
             else:
                 self.system = AggressorSystem()
         
@@ -153,14 +160,14 @@ class AI:
 
         current_faction.generals = list(filter(lambda general: general.dead == False, current_faction.generals))
 
-        if not current_faction.commander:
+        if not current_faction.commander and self.system.need_commander:
             current_faction.choose_commander(current_units)
 
         if current_faction.commander and current_faction.age % 25 == 0:
             current_faction.goal = current_faction.commander.choose_goal()
 
         retVal = True
-        while retVal and len(current_faction.generals) < (len(current_units) // 15) + 1:
+        while retVal and len(current_faction.generals) < (len(current_units) // 300) + 1:
             retVal = current_faction.choose_general(current_units)
             
         for u in current_units:
@@ -225,6 +232,7 @@ class AggressorSystem:
         """It doesn't care what its soldiers, generals, or even the commander thinks, all the aggressor wants is to send units towards enemy cities"""
         self.build_units_queue = []
         self.build_structures_queue = []
+        self.need_commander = True
 
     def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache, top_models, unit_dict):        
         for general in current_faction.generals:
@@ -250,6 +258,7 @@ class BalancedSystem:
         """Base system showing off both the capability to take cities and gather materials, but doesn't have any great strategy"""
         self.build_units_queue = []
         self.build_structures_queue = []
+        self.need_commander = True
 
     def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache, top_models, unit_dict):
         for general in current_faction.generals:
@@ -311,6 +320,7 @@ class DefenceSystem:
         """Showcases a turtling effect to maintain cities, NOT BUILT OUT YET"""
         self.build_units_queue = []
         self.build_structures_queue = []
+        self.need_commander = True
 
     def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache, top_models):
    
@@ -334,7 +344,6 @@ class DefenceSystem:
 def create_new_model(models):
     parent1 = random.choice(models)
     parent2 = random.choice(models)
-    while parent1 == parent2: parent2 = random.choice(models)
 
     return parent1.crossover(parent2)
 
@@ -353,23 +362,31 @@ class GANNSystem:
         self.build_units_queue = []
         self.build_structures_queue = []
         self.base_model = base_models
+        self.need_commander = False
 
     def score_model(self, general, top_models, faction):
         score = 0
 
-        score += general.soldiers_killed * 100
-        score -= general.soldiers_lost * 120
-
-        score += general.cities_gained * 200
-        score -= general.cities_lost * 250
         
-        score -= (faction.age - general.creation_age)
+            
+
+        score += general.soldiers_killed * 200
+        score -= general.soldiers_lost * 250
+
+        score += general.cities_gained * 500
+        score -= general.cities_lost * 510
+        
+        score -= (faction.age - general.creation_age) * 20
+
+
+
         
         for i, (old_score, model, _) in enumerate(top_models):
             if model == general.NNModel:
                 if score > old_score:
                     top_models[i][0] = score
                     top_models[i][2] = Stats(general, faction.age - general.creation_age) 
+                    top_models.sort(key=lambda x: x[0], reverse=True)
 
                 break
         
@@ -382,6 +399,71 @@ class GANNSystem:
                 top_models.sort(key=lambda x: x[0], reverse=True)
                 top_models.pop(-1)
 
+    def make_decision(self, general, current_cities, total_cities, current_cities_pos, cities, factions, current_faction, unit_dict, gmap, move_cache):
+
+        def dist(x1, y1, x2, y2):
+            return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** .5
+        
+        def enemys_around_this_point(point, dist):
+            nearby_enemy_units = 0
+            for j in range(-dist, dist+1):
+                for i in range(-dist, dist+1):
+                    new_pos = vec2.Vec2(i + general.pos.x, j + general.pos.y)
+                    if new_pos not in unit_dict.by_pos: continue
+
+                    found_unit = unit_dict.by_pos[new_pos]
+                    if found_unit and found_unit.faction_id != general.faction_id:
+                        nearby_enemy_units += 1
+
+            nearby_enemy_units = nearby_enemy_units / (((dist * 2) + 1) ** 2)
+            return nearby_enemy_units
+
+        max_map_distance = dist(0, 0, gmap.width, gmap.height)
+        # Make decision using NN Model
+        inputs = []
+
+        troop_health = sum(unit.health for unit in general.soldiers_commanding) + general.health
+        troop_max_health = sum(unit.maxhealth for unit in general.soldiers_commanding) + general.maxhealth
+        troop_percentage_health = troop_health / troop_max_health
+        inputs.append(troop_percentage_health)
+
+        troop_size = len(general.soldiers_commanding) / 200
+        inputs.append(troop_size)
+
+        cities_owned_percentage = len(current_cities) / total_cities
+        inputs.append(cities_owned_percentage)
+
+        if len(current_cities) == 0: distance_to_nearest_ally_city = 0
+        else: distance_to_nearest_ally_city = min(dist(city[0], city[1], general.pos.x, general.pos.y) for city in current_cities_pos)
+        distance_to_nearest_ally_city_normalized = distance_to_nearest_ally_city / max_map_distance
+        inputs.append(distance_to_nearest_ally_city_normalized)
+
+        if len(current_cities) == total_cities: distance_to_nearest_enemy_city = 0
+        else: distance_to_nearest_enemy_city = min(min(dist(city.pos.x, city.pos.y, general.pos.x, general.pos.y) for city in cities[fid]) for fid in factions if fid != current_faction.ID and cities[fid])
+        distance_to_nearest_enemy_city = distance_to_nearest_enemy_city / max_map_distance
+        inputs.append(distance_to_nearest_enemy_city)
+
+        # Get the amount of enemies at each of the destination points
+        possible_points = [(general.pos.x, general.pos.y),
+                            (-99,-99) if not current_cities_pos else min(current_cities_pos, key = lambda pos: dist(pos[0], pos[1], general.pos.x, general.pos.y)),
+                           general.choose_targeted_city(cities, factions, "closest", gmap, move_cache),
+                           general.choose_targeted_city(cities, factions, "furthest", gmap, move_cache)]
+        for point in possible_points:
+            if point: inputs.append(enemys_around_this_point(point, 4))
+            else: inputs.append(0)
+
+
+        # can_buy_structure = int(current_faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]) and current_faction.can_build_structure(params.STRUCTURE_COST["miner"]))
+        # inputs.append(can_buy_structure)
+        
+        # Feed inputs to decision model
+        decision = general.NNModel.feedForward(inputs)
+
+        # Move based on decision
+        decision = np.argmax(decision)
+
+        return decision
+
     def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache, top_models, unit_dict):
         def dist(x1, y1, x2, y2):
             return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** .5
@@ -391,7 +473,7 @@ class GANNSystem:
                 if self.base_model:
                     new_model = neuralNetworks.Model()
                     new_model.load(self.base_model)
-                elif len(top_models) > 1:
+                elif len(top_models) > 0:
                     new_model = create_new_model([model[1] for model in top_models])
                     new_model.mutate()
                 else:
@@ -400,103 +482,12 @@ class GANNSystem:
                 general.NNModel = new_model
             
             if total_cities == len(current_cities):
-                    general.choose_targeted_unit(units, gmap, move_cache) 
+                 general.choose_targeted_unit(units, gmap, move_cache) 
 
             else:
+
+                decision = self.make_decision(general, current_cities, total_cities, current_cities_pos, cities, factions, current_faction, unit_dict, gmap, move_cache)
                 
-                max_map_distance = dist(0, 0, gmap.width, gmap.height)
-                
-                # Make decision using NN Model
-                inputs = []
-
-                troop_health = sum(unit.health for unit in general.soldiers_commanding) + general.health
-                troop_max_health = sum(unit.maxhealth for unit in general.soldiers_commanding) + general.maxhealth
-                troop_percentage_health = troop_health / troop_max_health
-                inputs.append(troop_percentage_health)
-
-                cities_owned_percentage = len(current_cities) / total_cities
-                inputs.append(cities_owned_percentage)
-
-                if len(current_cities) == 0: distance_to_nearest_ally_city = 0
-                else: distance_to_nearest_ally_city = min(dist(city[0], city[1], general.pos.x, general.pos.y) for city in current_cities_pos)
-                distance_to_nearest_ally_city_normalized = distance_to_nearest_ally_city / max_map_distance
-                inputs.append(distance_to_nearest_ally_city_normalized)
-
-                if len(current_cities) == total_cities: distance_to_nearest_enemy_city = 0
-                else: distance_to_nearest_enemy_city = min(min(dist(city.pos.x, city.pos.y, general.pos.x, general.pos.y) for city in cities[fid]) for fid in factions if fid != current_faction.ID and cities[fid])
-                distance_to_nearest_enemy_city = distance_to_nearest_enemy_city / max_map_distance
-                inputs.append(distance_to_nearest_enemy_city)
-                
-                nearby_enemy_units = 0
-                for j in range(-5, 6):
-                    for i in range(-5, 6):
-                        new_pos = vec2.Vec2(i + general.pos.x, j + general.pos.y)
-                        if new_pos not in unit_dict.by_pos: continue
-
-                        found_unit = unit_dict.by_pos[new_pos]
-                        if found_unit and found_unit.faction_id != general.faction_id:
-                            nearby_enemy_units += 1
-                nearby_enemy_units = nearby_enemy_units / 99
-                inputs.append(nearby_enemy_units)
-
-                ally_point_enemies = 0
-                if current_cities_pos:
-                    ally_targeted_point = min(current_cities_pos, key = lambda pos: dist(pos[0], pos[1], general.pos.x, general.pos.y))
-                    for j in range(-5, 6):
-                        for i in range(-5, 6):
-                            new_pos = vec2.Vec2(i + ally_targeted_point[0], j + ally_targeted_point[1])
-                            if new_pos not in unit_dict.by_pos: continue
-
-                            found_unit = unit_dict.by_pos[new_pos]
-                            if found_unit and found_unit.faction_id != general.faction_id:
-                                ally_point_enemies += 1
-                    nearby_enemy_units = ally_point_enemies / 99
-                    inputs.append(nearby_enemy_units)
-                else:
-                    inputs.append(0)
-
-                enemy_point_enemies = 0
-                enemy_closest_city = general.choose_targeted_city(cities, factions, "closest", gmap, move_cache)
-                if enemy_closest_city == None:
-                    inputs.append(0)
-                else:
-                    for j in range(-5, 6):
-                        for i in range(-5, 6):
-                            new_pos = vec2.Vec2(i + enemy_closest_city[0], j + enemy_closest_city[1])
-                            if new_pos not in unit_dict.by_pos: continue
-
-                            found_unit = unit_dict.by_pos[new_pos]
-                            if found_unit and found_unit.faction_id != general.faction_id:
-                                enemy_point_enemies += 1
-                    nearby_enemy_units = enemy_point_enemies / 99
-                    inputs.append(nearby_enemy_units)
-
-                enemy_point_enemies = 0
-                enemy_closest_city = general.choose_targeted_city(cities, factions, "furthest", gmap, move_cache)
-                if enemy_closest_city == None:
-                    inputs.append(0)
-                else:
-                    for j in range(-5, 6):
-                        for i in range(-5, 6):
-                            new_pos = vec2.Vec2(i + enemy_closest_city[0], j + enemy_closest_city[1])
-                            if new_pos not in unit_dict.by_pos: continue
-
-                            found_unit = unit_dict.by_pos[new_pos]
-                            if found_unit and found_unit.faction_id != general.faction_id:
-                                enemy_point_enemies += 1
-                    nearby_enemy_units = enemy_point_enemies / 99
-                    inputs.append(nearby_enemy_units)
-
-
-
-                # can_buy_structure = int(current_faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]) and current_faction.can_build_structure(params.STRUCTURE_COST["miner"]))
-                # inputs.append(can_buy_structure)
-                
-                # Feed inputs to decision model
-                decision = general.NNModel.feedForward(inputs)
-
-                # Move based on decision
-                decision = np.argmax(decision)
                 
                 if decision == 0 and current_cities_pos: # Move to nearest ally city
                     general.targeted_pos = min(current_cities_pos, key = lambda pos: dist(pos[0], pos[1], general.pos.x, general.pos.y))
@@ -514,16 +505,16 @@ class GANNSystem:
                     if general.targeted_pos:
                         general.create_flow_field(general.targeted_pos, gmap, move_cache)
 
-                    
-
                 # if decision == 2: # Move towards nearest resource
                 #     general.choose_target_terrain(gmap, (cell_terrain.Terrain.Forest, cell_terrain.Terrain.Stone), move_cache)
 
                 if decision == 3: # Defend current position this turn
                     pass
         
+                general.NNModel.chosen_percentage[decision] += 1
+                general.NNModel.chosen_count += 1
 
-                self.score_model(general, top_models, current_faction)
+                # self.score_model(general, top_models, current_faction)
 
 
 

@@ -161,5 +161,13 @@ Some of my coolest observations from watching the AI "Learn":
   - There was a general that figured out how to wiggle back and forth to stop turndeath
  - At first there was no penalty to losing cities since in an army of many generals who do you attribute the lost to
   - Enemy generals would wiggle back and forth together to lose then reclaim cities
+ - When it changed to high faction count without shifting the fitness func they immediatly started becoming more protectionary as they had less cities and more immediate threat of death
 
 Gotten up to 75% winrate across 40 games versus the default Aggressor system
+
+Engine limiations that make the neural network AIs hard to make efficient:
+ - Generals can only protect one point at once, maybe have commander neural networks aswell?
+ - Furthermore the best actions to take are a flavor of just bombarding cities until you come out on top
+  - Aggressive AIs beat out any resource sgathering and cause the most efficient to be to run around the board and claim as many cities as you possibly can
+
+ - Attempted both rating models based on how often they won and their statistics, nothing got them to massively improve

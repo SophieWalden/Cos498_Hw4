@@ -16,7 +16,7 @@ import random
 
 
 
-MODE = "versus" # versus or nature determines whether defecting is allowed
+MODE = "nature" # versus or nature determines whether defecting is allowed
     
 # ##########################################################33
 # FACTION STUFF
@@ -26,8 +26,8 @@ CITY_INCOME = 3
 
 # How many starting factions in the game?
 if MODE == "nature":
-    FACTIONS_COUNT = 8
-    CITIES_PER_FACTION = 2
+    FACTIONS_COUNT = 2
+    CITIES_PER_FACTION = 6
 elif MODE == "versus":
     FACTIONS_COUNT = 2
     CITIES_PER_FACTION = 6

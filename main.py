@@ -20,6 +20,7 @@ from structure import Structure
 from faction import Faction
 import cProfile, pstats
 from collections import OrderedDict
+from termcolor import colored
 
 # ###################################################################
 # DISPLAY
@@ -508,7 +509,7 @@ def get_faction_name(chosen_names):
 
     return name
 
-def gen_factions(gmap):
+def gen_factions(gmap, model_eval):
 
     factions = {}
     chosen_names = []
@@ -519,7 +520,7 @@ def gen_factions(gmap):
         _, color = POSSIBLE_FACTIONS[len(factions)]
         factions[name] = faction.Faction(
             name, params.STARTING_FACTION_MONEY,
-            ai.AI(name, color), color, len(factions) * 999999999, name
+            ai.AI(name, color, model_eval if color == (200, 0, 0) else None), color, len(factions) * 999999999, name
         )
   
     return factions
@@ -1020,15 +1021,18 @@ def kill(unit, unit_dict):
     if unit.general_following:
         if unit in unit.general_following.soldiers_commanding: unit.general_following.soldiers_commanding.remove(unit)
         unit.general_following.soldiers_lost += 1
-    
+   
+
+def GameLoop(display, drawn=True, top_models=[], model_eval=None):
+    if drawn: 
+        winw, winh = pygame.display.get_window_size()
+        desired_scroll = display.zoom
 
 
-def GameLoop(display):
-    winw, winh = pygame.display.get_window_size()
     gmap = gen_game_map(50, 50)
     move_cache = {}
     
-    factions = gen_factions(gmap)
+    factions = gen_factions(gmap, model_eval)
     cities = gen_cities(gmap, list(factions.keys()))
     unit_dict = UnitDict(list(factions.keys()))
     combat_positions = []
@@ -1060,88 +1064,87 @@ def GameLoop(display):
     pressed_time = 0
     selected_unit = None
     dragging, hover = False, False
-    desired_scroll = display.zoom
     empty_structures = []
     all_stats = {}
-    top_models = []
-    while display.run:
-        pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                display.run = False
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q:
+    while not drawn or display.run:
+        if drawn: 
+            pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
                     display.run = False
                     sys.exit()
-                elif event.key == pygame.K_LEFT:
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        display.run = False
+                        sys.exit()
+                    elif event.key == pygame.K_LEFT:
 
-                    # Lower if you want a faster game speed.
+                        # Lower if you want a faster game speed.
+                        
+                        speed = speed / 2
+                        speed = max(speed, 8)
+                    elif event.key == pygame.K_RIGHT:
+
+                        # Increase if you want a slower game speed.
+                        if speed < 4096:
+                            speed = speed * 2
+
+                    elif event.key == pygame.K_r:
+                        return top_models
+                        
+                    # elif event.key == pygame.K_u:
+                    #     TILE_X_OFFSET -= 1
+                    # elif event.key == pygame.K_i:
+                    #     TILE_X_OFFSET += 1
+                    # elif event.key == pygame.K_o:
+                    #     TILE_Y_OFFSET -= 1
+                    # elif event.key == pygame.K_p:
+                    #     TILE_Y_OFFSET += 1
                     
-                    speed = speed / 2
-                    speed = max(speed, 8)
-                elif event.key == pygame.K_RIGHT:
+                elif event.type == pygame.MOUSEWHEEL:
+                    if pos[0] > winw - 200 and pos[0] < winw - 10 and pos[1] > 10 and pos[1] < winh - 25:
+                        display.menu_scroll += event.y * 10
+                        display.menu_scroll = max(display.menu_scroll, 0)
 
-                    # Increase if you want a slower game speed.
-                    if speed < 4096:
-                        speed = speed * 2
+                        
+                    else:
+                        scroll_val = min(max(event.y, -3), 3)/6 + 1
+                        desired_scroll = max(min(scroll_val * desired_scroll, 2.5), 0.5)
+                        
 
-                elif event.key == pygame.K_r:
-                    return 
-                    
-                # elif event.key == pygame.K_u:
-                #     TILE_X_OFFSET -= 1
-                # elif event.key == pygame.K_i:
-                #     TILE_X_OFFSET += 1
-                # elif event.key == pygame.K_o:
-                #     TILE_Y_OFFSET -= 1
-                # elif event.key == pygame.K_p:
-                #     TILE_Y_OFFSET += 1
-                
-            elif event.type == pygame.MOUSEWHEEL:
-                if pos[0] > winw - 200 and pos[0] < winw - 10 and pos[1] > 10 and pos[1] < winh - 25:
-                    display.menu_scroll += event.y * 10
-                    display.menu_scroll = max(display.menu_scroll, 0)
+                elif event.type == pygame.VIDEORESIZE:
+                    display.width, display.height = event.w, event.h
+                    display.screen = pygame.display.set_mode((event.w, event.h),
+                                                pygame.RESIZABLE)
 
-                    
-                else:
-                    scroll_val = min(max(event.y, -3), 3)/6 + 1
-                    desired_scroll = max(min(scroll_val * desired_scroll, 2.5), 0.5)
-                    
-
-            elif event.type == pygame.VIDEORESIZE:
-                display.width, display.height = event.w, event.h
-                display.screen = pygame.display.set_mode((event.w, event.h),
-                                              pygame.RESIZABLE)
-
-                winw, winh = event.w, event.h
+                    winw, winh = event.w, event.h
 
 
-        if display.zoom != desired_scroll:
-      
-            difference = display.zoom - desired_scroll
-            change = difference * 0.25
-
-            if abs(change) < 0.001:
-                display.zoom = desired_scroll
-            else:
-                display.zoom -= change
-
-            display.zoom = max(min(display.zoom, 2.5), 0.5)
-    
-        if pressed[0] and pressed_time == 0: pressed_time = time.perf_counter()
-        if selected_unit and not pressed[0] and time.perf_counter() - pressed_time < 0.1: selected_unit = None
-        if not pressed[0] and pressed_time != 0: pressed_time = 0
+            if display.zoom != desired_scroll:
         
-        if selected_unit and selected_unit.dead == True: selected_unit = None
-   
+                difference = display.zoom - desired_scroll
+                change = difference * 0.25
 
-        handle_mouse_functions(display.camera_pos, display.zoom)
+                if abs(change) < 0.001:
+                    display.zoom = desired_scroll
+                else:
+                    display.zoom -= change
 
-        display.screen.fill("#121212")
+                display.zoom = max(min(display.zoom, 2.5), 0.5)
+        
+            if pressed[0] and pressed_time == 0: pressed_time = time.perf_counter()
+            if selected_unit and not pressed[0] and time.perf_counter() - pressed_time < 0.1: selected_unit = None
+            if not pressed[0] and pressed_time != 0: pressed_time = 0
+            
+            if selected_unit and selected_unit.dead == True: selected_unit = None
+    
+
+            handle_mouse_functions(display.camera_pos, display.zoom)
+
+            
 
         started_turn = turn
-        while ticks >= speed and not GAME_OVER and turn - started_turn < 200:
+        while (ticks >= speed or not drawn) and not GAME_OVER and turn - started_turn < 200:
             ticks -= speed
             cities_by_faction = {}
             delete_factions = []
@@ -1167,6 +1170,30 @@ def GameLoop(display):
 
             game_over = CheckForGameOver(cities, unit_dict)
             if game_over[0]:
+                if MODE == "nature":
+                    # output = []
+                    # output.append(colored(f"Turn {turn} - Top Models:", 'cyan', attrs=['bold']))
+                    # for i, (score, model, stats) in enumerate(top_models):
+                    #     chosen_percentage = {key: val / model.chosen_count for key, val in model.chosen_percentage.items()}
+                    #     output.append(colored(f"\nRank {i + 1}:", 'yellow', attrs=['bold']))
+                    #     output.append(f"  {colored(f'Score:', 'green')} {score}")
+                    #     output.append(f"  {colored(f'Model breakdown:', 'magenta')} {chosen_percentage}")
+                    #     output.append(f"  {colored(f'Kills:', 'red')} {stats.kills}")
+                    #     output.append(f"  {colored(f'Losses:', 'blue')} {stats.losses}")
+                    #     output.append(f"  {colored(f'Cities Gained:', 'green')} {stats.cities}")
+                    #     output.append(f"  {colored(f'Cities Lost:', 'yellow')} {stats.cities_lost}")
+                    #     output.append(f"  {colored(f'Age (Turns):', 'cyan')} {stats.age}")\
+                    
+                    # output = "\n".join(output)
+                    # os.system('cls' if os.name == 'nt' else 'clear')
+                    # print(output)
+
+                    # top_models[0][1].save(f"models/model_{turn}.npz")
+
+                    return factions[game_over[1]].generals[0]
+
+
+                #     return top_models
                 defecting_count = 10
                 for unit in unit_dict.by_faction[game_over[1]]:
                     if unit.rank == "general" and defecting_count: 
@@ -1174,7 +1201,7 @@ def GameLoop(display):
                         unit.defecting = True
                 
                 if MODE == "versus":
-                    print(f"Winning faction: {game_over[1]}")
+                    #print(f"Winning faction: {game_over[1]}")
                     GAME_OVER = True
                     return factions[game_over[1]].color
 
@@ -1189,7 +1216,7 @@ def GameLoop(display):
                     else:
                         u.stuck_rounds = 0
 
-                    if u.stuck_rounds > 30 or factions[fid].age - u.creation_age > 1000:
+                    if u.stuck_rounds > 30 or factions[fid].age - u.creation_age > 300:
                         kill_list.append(u)
                     else:
                         u.last_pos = u.pos
@@ -1197,119 +1224,156 @@ def GameLoop(display):
             for unit in kill_list:
                 kill(unit, unit_dict)
 
-            if turn % 1000 == 0 and params.MODE == "nature":
-                print(f"Turn {turn} models:")
-                for i, (score, model, stats) in enumerate(top_models):
-                    print(f"Rank {i+1}: {score} kills: {stats.kills} losses: {stats.losses} cities gained: {stats.cities} cities lost: {stats.cities_lost} age: {stats.age}")
-
-                if turn % 1000 == 0 and not top_models[0][1].saved:
-                    top_models[0][1].save(f"models/model_turn{turn}.npz")
-
         # Move units toward their directed pos so they don't move by teleportation
-        hover = False
-        for fid, ulist in unit_dict.by_faction.items():
-            for u in ulist:
+        if drawn:
+            display.screen.fill("#121212")
 
-                if u.moving:
-                    wanted_pos = u.world_to_cord(u.pos)
-                    
-                    dist = abs(wanted_pos[0] - u.display_pos[0]) + abs(wanted_pos[1] - u.display_pos[1]) 
-              
-                    if speed >= 128:
-                        UNIT_SPEED = dist * 0.2
-                    else:
-                        UNIT_SPEED = dist * 0.5
+            hover = False
+            for fid, ulist in unit_dict.by_faction.items():
+                for u in ulist:
+
+                    if u.moving:
+                        wanted_pos = u.world_to_cord(u.pos)
                         
-                    if dist > 500 or dist < 5:
-                        u.display_pos = wanted_pos
-                        u.moving = False
-                    else:
-     
-                    
-                        angle = math.atan2(wanted_pos[1] - u.display_pos[1], wanted_pos[0] - u.display_pos[0])
-                        x_delta, y_delta = math.cos(angle) * UNIT_SPEED, math.sin(angle) * UNIT_SPEED
+                        dist = abs(wanted_pos[0] - u.display_pos[0]) + abs(wanted_pos[1] - u.display_pos[1]) 
+                
+                        if speed >= 128:
+                            UNIT_SPEED = dist * 0.2
+                        else:
+                            UNIT_SPEED = dist * 0.5
+                            
+                        if dist > 500 or dist < 5:
+                            u.display_pos = wanted_pos
+                            u.moving = False
+                        else:
+        
                         
-                        u.display_pos[0] += x_delta
-                        u.display_pos[1] += y_delta
+                            angle = math.atan2(wanted_pos[1] - u.display_pos[1], wanted_pos[0] - u.display_pos[0])
+                            x_delta, y_delta = math.cos(angle) * UNIT_SPEED, math.sin(angle) * UNIT_SPEED
+                            
+                            u.display_pos[0] += x_delta
+                            u.display_pos[1] += y_delta
 
 
-                x, y, size, visible = display.get_unit_actual_pos(u)
-                #Selected
-                if visible and pos[0] >= x and pos[0] <= x + size and pos[1] >= y and pos[1] <= size + y and pressed[0] and time.perf_counter() - pressed_time < 0.1:
-                    selected_unit = u
-                    pressed_time = time.perf_counter() - 100
-                #hovering
-                elif visible and pos[0] >= x and pos[0] <= x + size and pos[1] >= y and pos[1] <= size + y:
-                    hover = True
-                    pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
-                    u.additional_size = 15
-                else:
-                    u.additional_size = 0
+                    x, y, size, visible = display.get_unit_actual_pos(u)
+                    #Selected
+                    if visible and pos[0] >= x and pos[0] <= x + size and pos[1] >= y and pos[1] <= size + y and pressed[0] and time.perf_counter() - pressed_time < 0.1:
+                        selected_unit = u
+                        pressed_time = time.perf_counter() - 100
+                    #hovering
+                    elif visible and pos[0] >= x and pos[0] <= x + size and pos[1] >= y and pos[1] <= size + y:
+                        hover = True
+                        pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
+                        u.additional_size = 15
+                    else:
+                        u.additional_size = 0
 
-                if selected_unit and u == selected_unit:
-                    u.additional_size = 30
+                    if selected_unit and u == selected_unit:
+                        u.additional_size = 30
 
-        
-        if hover:
-            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
-        else:
-            pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
-        
-        display.create_animation(combat_positions, 3, "battle_animation")
-        display.create_animation([item[0] for item in building_positions if item[1] == "woodcutter"], 2, "woodcutter_upgrade")
-        display.create_animation([item[0] for item in building_positions if item[1] == "miner"], 2, "miner_upgrade")
-        display.draw_map(gmap)
-        display.draw_cities(cities, factions)
-        display.draw_units(unit_dict, factions)
+            
+            if hover:
+                pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_HAND)
+            else:
+                pygame.mouse.set_cursor(pygame.SYSTEM_CURSOR_ARROW)
+            
+            display.create_animation(combat_positions, 3, "battle_animation")
+            display.create_animation([item[0] for item in building_positions if item[1] == "woodcutter"], 2, "woodcutter_upgrade")
+            display.create_animation([item[0] for item in building_positions if item[1] == "miner"], 2, "miner_upgrade")
+            display.draw_map(gmap)
+            display.draw_cities(cities, factions)
+            display.draw_units(unit_dict, factions)
 
-        building_positions, combat_positions = [], []
+            building_positions, combat_positions = [], []
 
-        # ###########################################3
-        # RIGHT_SIDE UI
-        display.draw_ui(turn, factions, unit_dict, cities, selected_unit)
- 
-
-
+            # ###########################################3
+            # RIGHT_SIDE UI
+            display.draw_ui(turn, factions, unit_dict, cities, selected_unit)
     
-        pygame.display.flip()
-
-        if current_turn_time_ms:
-            current_turn_time_ms = time.perf_counter() - current_turn_time_ms
-            if flow_field_queue and (len(move_cache) < 20 or current_turn_time_ms < 0.02):
-                pos = flow_field_queue.pop(0)
-                if pos not in move_cache: 
-                    move_cache[pos] = ai.create_flow_field(pos, gmap)
-
-        
 
 
-        dt = display.clock.tick(60)
-        ticks += dt
-        display.ticks += dt
-        current_turn_time_ms = time.perf_counter()
+            
+            pygame.display.flip()
+
+            if current_turn_time_ms:
+                current_turn_time_ms = time.perf_counter() - current_turn_time_ms
+                if flow_field_queue and (len(move_cache) < 20 or current_turn_time_ms < 0.02):
+                    pos = flow_field_queue.pop(0)
+                    if pos not in move_cache: 
+                        move_cache[pos] = ai.create_flow_field(pos, gmap)
+
+            
+
+
+            dt = display.clock.tick(60)
+            ticks += dt
+            display.ticks += dt
+            current_turn_time_ms = time.perf_counter()
 
 
 from collections import defaultdict
 def main(display=None):
     random.seed(None)
     winw, winh = 1400, 800
+    drawn = True
 
-    if not display:
+    if not display and drawn:
         display = init_display(winw, winh)
-
-    # profiler = cProfile.Profile()
-    # profiler.enable()
-
     record = defaultdict(lambda: 0)
+    winner = []
+    top_winners = {}
+    models_by_id = {}
+    saved = set([])
     while True:
-        winner = GameLoop(display)
+        top_models = []
+        if params.MODE == "nature":
+            winner = []
+            if top_winners:
+                print()
+                for model_id in random.choices(list(top_winners.keys()), weights=list(top_winners.values()), k=4):
+                    winner.append((1, models_by_id[model_id], 1))
 
-        record[winner] += 1
-        print(record)
-    # profiler.disable()
-    # profiler.print_stats(sort='tottime')  
+
+                for key, val in sorted(list(top_winners.items()), key=lambda x: x[1]**.5, reverse=True)[:20]:
+                    print(f"{key}: {val}")
+
+            top_models = winner
+
+        winner = GameLoop(display, drawn=drawn, top_models=top_models)
+
+        if params.MODE == "nature" and winner.NNModel:
+            ID = winner.NNModel.id
+            
+            if ID not in top_winners: top_winners[ID] = 0
+            top_winners[ID] += 1
+            models_by_id[ID] = winner.NNModel
+
+            for winner_id in winner.NNModel.parents:
+                top_winners[winner_id] += 0.25
+    
+                if top_winners[winner_id] > 25 and ID not in saved:
+                    saved.add(winner_id)
+                    winner.NNModel.save(f"models/model_{len(saved)}.npz")
+
+        
+        if params.MODE == "versus":
+            record[winner] += 1
+            print(record)
+
+def eval_models():
+    path = f"./models/"
+    for model in sorted(os.listdir("./models"), key=lambda x: int(x[x.index("_")+1:x.index(".")])):
+        full_path = f"{path}{model}"
 
 
+        n = 1
+        wins = 0
+        for _ in range(n):
+            winner = GameLoop(None, drawn=False, top_models=[], model_eval=full_path)
+
+            if winner == (200, 0, 0): wins += 1
+
+        print(f"{model}: wins: {wins} / {n}")
 
 if __name__ == "__main__":
     main()
