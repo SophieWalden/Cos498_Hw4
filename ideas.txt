@@ -171,3 +171,5 @@ Engine limiations that make the neural network AIs hard to make efficient:
   - Aggressive AIs beat out any resource sgathering and cause the most efficient to be to run around the board and claim as many cities as you possibly can
 
  - Attempted both rating models based on how often they won and their statistics, nothing got them to massively improve
+
+ Fix structure non-claiming bug

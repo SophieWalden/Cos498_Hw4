@@ -4,14 +4,14 @@ import time
 
 class Model:
     def __init__(self, parents=[]):
-        self.layer_size = [9, 16, 8, 4]
-        self.activation_functions = [None, "ReLU", "ReLU", "Softmax"]
+        self.layer_size = [11, 32, 16, 8, 5]
+        self.activation_functions = [None, "ReLU", "ReLU", "ReLU", "Softmax"]
         self.saved = False
 
         self.weights = {}
         self.biases = {}
         self.nodes = []
-        self.chosen_percentage = {0: 0, 1: 0, 2: 0, 3: 0}
+        self.chosen_percentage = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
         self.chosen_count = 0
         self.id = random.randint(0, 100000000)
         self.parents = parents
@@ -80,10 +80,8 @@ class Model:
     def save(self, filename="model_weights_and_biases.npz"):
         np.savez(filename, weights=self.weights, biases=self.biases)
         self.saved = True
-        #print(f"Weights and biases saved to {filename}")
 
     def load(self, filename="model_weights_and_biases.npz"):
         data = np.load(filename, allow_pickle=True)
         self.weights = data["weights"]
         self.biases = data["biases"]
-        #print(f"Weights and biases loaded from {filename}")

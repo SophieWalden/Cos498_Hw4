@@ -82,19 +82,20 @@ class AI:
 
         # Color based assignment so we can know which color is being controlled how    
 
-        if params.MODE == "nature":
+        if params.MODE == "evolution":
            
             if color == (200, 0, 0):
                 self.system = GANNSystem()
             else:
                 self.system = AggressorSystem()
-          
+        elif params.MODE == "endless":
+            self.system = GANNSystem()
         else:
             
             if starting_model:
                 self.system = GANNSystem(starting_model)
             elif color == (200, 0, 0):
-                self.system = GANNSystem("./models/model_23.npz")
+                self.system = GANNSystem("./model_saved/pretrained_model.npz")
             else:
                 self.system = AggressorSystem()
         
@@ -167,7 +168,8 @@ class AI:
             current_faction.goal = current_faction.commander.choose_goal()
 
         retVal = True
-        while retVal and len(current_faction.generals) < (len(current_units) // 300) + 1:
+        toon_size = 300 if params.MODE != "endless" else 10 # Smaller toon size for more defecting in endless mode
+        while retVal and len(current_faction.generals) < (len(current_units) // toon_size) + 1:
             retVal = current_faction.choose_general(current_units)
             
         for u in current_units:
@@ -315,32 +317,6 @@ class BalancedSystem:
                 self.build_structures_queue.append(((u.pos.x, u.pos.y), "miner"))
 
 
-class DefenceSystem:
-    def __init__(self):
-        """Showcases a turtling effect to maintain cities, NOT BUILT OUT YET"""
-        self.build_units_queue = []
-        self.build_structures_queue = []
-        self.need_commander = True
-
-    def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache, top_models):
-   
-        def dist(x1, y1, x2, y2):
-            return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** .5
-
-        city_strength = {}
-        for ci in range(len(current_cities)):
-            city = current_cities[ci] 
-            city_strength[ci] = sum(dist(city.pos.x, city.pos.y, unit.pos.x, unit.pos.y) < 4 for unit in current_units)
-
-        cities_sorted = sorted(city_strength.keys(), key=lambda x: city_strength[x])
-
-        cost = unit.UNIT_COSTS["R"]
-        while cities_sorted and current_faction.materials["gold"] >= cost:
-            ci = cities_sorted.pop(0)
-            self.build_units_queue.append((current_cities[ci].ID, random.choice(['R', 'S', 'P']), {"wood": 0, "stone": 0}))
-
-
-
 def create_new_model(models):
     parent1 = random.choice(models)
     parent2 = random.choice(models)
@@ -363,41 +339,6 @@ class GANNSystem:
         self.build_structures_queue = []
         self.base_model = base_models
         self.need_commander = False
-
-    def score_model(self, general, top_models, faction):
-        score = 0
-
-        
-            
-
-        score += general.soldiers_killed * 200
-        score -= general.soldiers_lost * 250
-
-        score += general.cities_gained * 500
-        score -= general.cities_lost * 510
-        
-        score -= (faction.age - general.creation_age) * 20
-
-
-
-        
-        for i, (old_score, model, _) in enumerate(top_models):
-            if model == general.NNModel:
-                if score > old_score:
-                    top_models[i][0] = score
-                    top_models[i][2] = Stats(general, faction.age - general.creation_age) 
-                    top_models.sort(key=lambda x: x[0], reverse=True)
-
-                break
-        
-        else:
-            if len(top_models) < 4:
-                top_models.append([score, general.NNModel,Stats(general, faction.age - general.creation_age) ])
-                top_models.sort(key=lambda x: x[0], reverse=True)
-            elif score > top_models[-1][0]:
-                top_models.append([score, general.NNModel, Stats(general, faction.age - general.creation_age) ])
-                top_models.sort(key=lambda x: x[0], reverse=True)
-                top_models.pop(-1)
 
     def make_decision(self, general, current_cities, total_cities, current_cities_pos, cities, factions, current_faction, unit_dict, gmap, move_cache):
 
@@ -430,6 +371,9 @@ class GANNSystem:
         troop_size = len(general.soldiers_commanding) / 200
         inputs.append(troop_size)
 
+        relative_control = len(general.soldiers_commanding) / len(unit_dict.by_pos)
+        inputs.append(relative_control)
+
         cities_owned_percentage = len(current_cities) / total_cities
         inputs.append(cities_owned_percentage)
 
@@ -453,8 +397,8 @@ class GANNSystem:
             else: inputs.append(0)
 
 
-        # can_buy_structure = int(current_faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]) and current_faction.can_build_structure(params.STRUCTURE_COST["miner"]))
-        # inputs.append(can_buy_structure)
+        can_buy_structure = int(current_faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]) and current_faction.can_build_structure(params.STRUCTURE_COST["miner"]))
+        inputs.append(can_buy_structure)
         
         # Feed inputs to decision model
         decision = general.NNModel.feedForward(inputs)
@@ -468,6 +412,7 @@ class GANNSystem:
         def dist(x1, y1, x2, y2):
             return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** .5
         
+        decision = -1
         for general in current_faction.generals:
             if general.NNModel == None:
                 if self.base_model:
@@ -484,10 +429,9 @@ class GANNSystem:
             if total_cities == len(current_cities):
                  general.choose_targeted_unit(units, gmap, move_cache) 
 
-            else:
+            elif params.MODE != "endless" or general.targeted_pos == None: # Limiter on amount of computations per second to balance the general count increase in endless
 
                 decision = self.make_decision(general, current_cities, total_cities, current_cities_pos, cities, factions, current_faction, unit_dict, gmap, move_cache)
-                
                 
                 if decision == 0 and current_cities_pos: # Move to nearest ally city
                     general.targeted_pos = min(current_cities_pos, key = lambda pos: dist(pos[0], pos[1], general.pos.x, general.pos.y))
@@ -505,18 +449,24 @@ class GANNSystem:
                     if general.targeted_pos:
                         general.create_flow_field(general.targeted_pos, gmap, move_cache)
 
-                # if decision == 2: # Move towards nearest resource
-                #     general.choose_target_terrain(gmap, (cell_terrain.Terrain.Forest, cell_terrain.Terrain.Stone), move_cache)
+                if decision == 3: # Move towards nearest resource
+                    general.choose_target_terrain(gmap, (cell_terrain.Terrain.Forest, cell_terrain.Terrain.Stone), move_cache)
 
-                if decision == 3: # Defend current position this turn
+                if decision == 4: # Defend current position this turn
                     pass
         
                 general.NNModel.chosen_percentage[decision] += 1
                 general.NNModel.chosen_count += 1
 
-                # self.score_model(general, top_models, current_faction)
-
 
 
         for ci in list(range(len(current_cities))):
             self.build_units_queue.append((current_cities[ci].ID, random.choice(['R', 'S', 'P']), {"wood": current_faction.materials["wood"]//10, "stone": current_faction.materials['stone']//10}))
+
+        if decision == 3:
+            for u in current_units:
+                if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Forest and current_faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]):
+                    self.build_structures_queue.append(((u.pos.x, u.pos.y), "woodcutter"))
+
+                if gmap.cells[u.pos].terrain == cell_terrain.Terrain.Stone and current_faction.can_build_structure(params.STRUCTURE_COST["miner"]):
+                    self.build_structures_queue.append(((u.pos.x, u.pos.y), "miner"))

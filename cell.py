@@ -10,7 +10,7 @@
 # Feel free to modify.
 
 
-import cell_terrain
+import cell_terrain, params
 
 
 ATTACK_DICT = {
@@ -32,12 +32,16 @@ DEFENSE_DICT = {
 }
 
 class Cell:
-    def __init__(self, terrain, owned_by=None):
+    def __init__(self, terrain, pos, owned_by=None):
         self.terrain = terrain
         self.owned_by = owned_by
+        self.pos = pos
     
     def get_attack_mod(self):
         return ATTACK_DICT[self.terrain]
 
     def get_defense_mod(self):
         return DEFENSE_DICT[self.terrain]
+
+    def generate_material(self):
+        return params.STRUCTURE_OUTPUT[self.terrain]

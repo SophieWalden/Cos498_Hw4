@@ -16,7 +16,7 @@ import random
 
 
 
-MODE = "nature" # versus or nature determines whether defecting is allowed
+MODE = "evolution" # versus or nature determines whether defecting is allowed
     
 # ##########################################################33
 # FACTION STUFF
@@ -25,7 +25,7 @@ MODE = "nature" # versus or nature determines whether defecting is allowed
 CITY_INCOME = 3
 
 # How many starting factions in the game?
-if MODE == "nature":
+if MODE == "evolution":
     FACTIONS_COUNT = 2
     CITIES_PER_FACTION = 6
 elif MODE == "versus":
@@ -37,14 +37,14 @@ STARTING_FACTION_MONEY = 500
 
 # How much money do structures cost?
 STRUCTURE_COST = {
-    "woodcutter": {"gold": 250},
+    "woodcutter": {"gold": 150},
     "miner": {"gold": 50, "wood": 30}
 }
 
 # What do structures give every turn?
 STRUCTURE_OUTPUT = {
-    "woodcutter": {"wood": 1},
-    "miner": {"stone": 1}
+    cell_terrain.Terrain.Woodcutter: {"wood": 1},
+    cell_terrain.Terrain.Miner: {"stone": 1}
 }
 
 # The rest of this is used to give the cities random

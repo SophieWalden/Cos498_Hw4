@@ -101,8 +101,6 @@ class Unit:
 
         return [x + 10, y - 15]
 
-    def __eq__(self, o):
-        return self.ID == o.ID and self.faction_id == o.faction_id
         
     # Combat Function:
     # Essentially, it is an NxN matrix for all the different

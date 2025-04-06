@@ -118,7 +118,7 @@ Shadowspire
 Astral
 Wraithborne
 Nightfall
-Seer’s Pact
+Seers Pact
 Arcanum
 Netherbound
 Stygian
@@ -175,8 +175,8 @@ Thunderborn
 Netherveil
 Ironborn
 Ashenspire
-Eclipse Pact
-Twilight Legion
+Eclipse
+Twilight
 Daggerfall
 Sunforge
 Frostbane
@@ -189,7 +189,7 @@ Hellspire
 Blazeborn
 Voidspire
 Riftborn
-Glacier Pact
+Glacier
 Order
 Sablefang
 Duskborn

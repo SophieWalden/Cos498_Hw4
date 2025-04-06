@@ -16,11 +16,11 @@ import math
 from cell import Cell
 import sys
 from collections import defaultdict
-from structure import Structure
 from faction import Faction
 import cProfile, pstats
 from collections import OrderedDict
 from termcolor import colored
+import isometricDisplay
 
 # ###################################################################
 # DISPLAY
@@ -28,429 +28,6 @@ from termcolor import colored
 # the look and feel (add sprites or something) you probably don't need
 # to mess with anything in this section
 # ####################################################################
-TILE_X_OFFSET = 24
-TILE_Y_OFFSET = 12
-IMAGE_SIZE = 50
-MODE = params.MODE
-
-class LRUCache:
-    def __init__(self, max_size=250):
-        self.cache = OrderedDict()
-        self.max_size = max_size
-
-    def get(self, key):
-        if key in self.cache:
-            self.cache.move_to_end(key)
-            return self.cache[key]
-        return None
-
-    def put(self, key, value):
-        if key in self.cache:
-            self.cache.move_to_end(key) 
-        elif len(self.cache) >= self.max_size:
-            self.cache.popitem(last=False) 
-        self.cache[key] = value
-        return value
-
-class Animation:
-    def __init__(self, name, images, id=-1, ticks_between_frames=10):
-        self.name, self.images, self.ticks_between_frames = name, self.load_animation(name, images), ticks_between_frames
-        self.index, self.ticks = 0, 0
-        self.finished = False
-        self.id = id
-        self.time_since_last_render = time.perf_counter()
-
-    def load_animation(self, name, images):
-        animation = []
-        for key, value in images.items():
-            if key.startswith(name):
-                animation.append((key, value))
-        
-        animation.sort(key = lambda item: int(item[0][len(name):]))
-        return [item[1] for item in animation]
-    
-    def get_next_image(self, speed):
-        frame_num = int(self.ticks // self.ticks_between_frames)
-
-        self.ticks += speed
-        if self.ticks >= len(self.images) * self.ticks_between_frames: self.finished = True
-
-        return self.images[frame_num], frame_num
-
-MENU_BACKGROUND = "#1a1f2e"
-MENU_OUTLINE = "#2a3b4c"
-TEXT_COLOR = (180, 180, 180)
-TILE_MAP = {cell_terrain.Terrain.Open: "open_tile", cell_terrain.Terrain.Forest: "forest_tile",
-                    cell_terrain.Terrain.Woodcutter: "woodcutter_tile", cell_terrain.Terrain.Water: "water_tile",
-                    cell_terrain.Terrain.Stone: "stone_tile", cell_terrain.Terrain.Miner: "miner_tile"}
-STRUCTURE_LIST = [cell_terrain.Terrain.Miner, cell_terrain.Terrain.Woodcutter]
-class Display:
-    def __init__(self, screen, clock):
-        self.screen = screen
-        self.clock = clock
-        self.run = True
-        self.delta = 0
-        self.font = pygame.freetype.Font('JetBrainsMono-Regular.ttf', 18)
-        self.map_cell_size = 20
-        self.images = self.load_images()
-        self.width, self.height = pygame.display.get_window_size()
-        self.queued_animations = defaultdict(lambda: [])
-        self.map = None
-        self.debug_id = 0
-        self.ticks = 0
-        self.zoom = 0.6 * (self.width / 1200)
-        self.camera_pos = [-800, 100]
-        self.menu_scroll = 0
-
-        self.text_cache = {}
-        self.image_cache = LRUCache()
-        self.setup_caches()
-
-    def setup_caches(self):
-        for number in "1234567890":
-            surface, rect = self.font.render(number, TEXT_COLOR)
-            self.text_cache[number] = (surface, rect)
-
-    # fmt: off
-    def draw_gobj(self, gobj):
-        pygame.draw.circle(
-            self.screen,
-            gobj.color,
-            gobj.pos(),
-            gobj.radius)
-        
-    def draw_text(self, given_surface, msg, x, y, color):
-        if msg.isdigit():
-            surfaces = []
-            width, height = 0, 0
-
-            for number in msg:
-                surface, rect = self.text_cache[number]
-                surfaces.append((surface, rect))
-                width += rect[2]
-                height = max(height, rect[3])
-
-            width += 2 * len(surfaces)
-            text_surface = pygame.Surface((width, height), pygame.SRCALPHA)
-            rect_x = 0
-            for (surface, rect) in surfaces:
-                text_surface.blit(surface, (rect_x, 0))
-                rect_x += rect[2] + 2
-        else:
-            if msg not in self.text_cache:
-                surface, rect = self.font.render(msg, TEXT_COLOR)
-                self.text_cache[msg] = (surface, None)
-
-            text_surface = self.text_cache[msg][0]
-
-
-        given_surface.blit(text_surface, (x, y))
-
-
-
-    def draw_line(self, p1, p2, color, width=1):
-        pygame.draw.line(
-            self.screen,
-            color,
-            p1,
-            p2,
-            width)
-
-    def get_tile_image(self, terrain, v, gmap):
-        """
-        
-            Gets the terrain image based on a couple conditions
-        
-        """
-        
-        if terrain == cell_terrain.Terrain.Water and (v.x == 0 or gmap.cells[vec2.Vec2(v.x - 1, v.y)].terrain != cell_terrain.Terrain.Water):
-            return self.images["water_shaded_top_tile"], "water_shaded_top_tile"
-
-        return self.images[TILE_MAP[terrain]], TILE_MAP[terrain]
-
-    def draw_map(self, gmap):
-        for v, c in gmap.cell_render_queue:
-            if self.is_onscreen(v.x, v.y, 50):
-                image = None
-        
-                if c.terrain not in TILE_MAP: return
-                
-                image, tile_name = self.get_tile_image(c.terrain, v, gmap)
-    
-            
-                x, y = self.world_to_cord((v.x, v.y))
-                self.blit(image, x, y, 50, tile_name)
-
-                # Render animation on top of each tile
-                indexes_to_remove = []
-                for i, (pos, animation, animation_speed) in enumerate(self.queued_animations[(v.x, v.y)]):
-                    image, frame_num = animation.get_next_image(animation_speed)
-
-                    self.blit(image, pos[0], pos[1], 50, f"{animation.name}_{frame_num}")
-                    if animation.finished: indexes_to_remove.append(i) 
-
-                for index in indexes_to_remove[::-1]:
-                    self.queued_animations[(v.x, v.y)].pop(index)
-
-                if c.owned_by:
-                    self.outline_tile(v.x, v.y, self.darken(c.owned_by.color, 2), "structure")
-         
-
-            
-
-    def draw_cities(self, cities, factions):
-        for c in cities:
-            f = factions[c.faction_id]
-            self.outline_tile(c.pos.x, c.pos.y, f.color, "tile")
-
-    def draw_units(self, unit_dict, factions):
-        for fid, ulist in unit_dict.by_faction.items():
-            fcolor = factions[fid].color
-            for u in ulist:
-                size = 30
-                if u.rank == "general": size = 50
-                elif u.rank == "commander": size = 70
-                size += u.additional_size
-
-                x, y = u.display_pos
-                if not self.is_onscreen(x, y, size, False): continue
-
-                image = {"P": self.images["paper_unit"], "R": self.images["rock_unit"], "S": self.images["scissor_unit"]}[u.utype]
-                image = image.copy()
-         
-                image.fill(self.darken(fcolor, 0.5), special_flags = pygame.BLEND_RGBA_MULT)
-
-                self.blit(image, x - ((size - 30) // 2), y - ((size - 30)), size, f"{u.utype}_{fcolor[0]}_{fcolor[1]}_{fcolor[2]}_{size}")
-
-
-
-    def world_to_cord(self, pos):
-        """Translates 2D array cords into cords for isometric rendering"""
-        x = pos[0] * TILE_X_OFFSET - pos[1] * TILE_X_OFFSET
-        y = pos[0] * TILE_Y_OFFSET + pos[1] * TILE_Y_OFFSET
-
-        return (x, y)
-
-    def outline_tile(self, x, y, color, type):
-        if not self.is_onscreen(x, y, 50): return
-
-        image_name = {"tile": "tile_outline", "structure": "structure_outline"}[type]
-
-        x, y = self.world_to_cord((x, y))
-        outline = self.images[image_name].copy()
-        
-        outline.fill(color, special_flags = pygame.BLEND_MULT)
-        self.blit(outline, x, y, 50, f"{image_name}_{color[0]}_{color[1]}_{color[2]}")
-        
-    
-    def is_onscreen(self, x, y, size, cord_adjustment=True):
-        if cord_adjustment: x,y = x * TILE_X_OFFSET - y * TILE_X_OFFSET, x * TILE_Y_OFFSET + y * TILE_Y_OFFSET
-        
-        adjusted_x = x - self.camera_pos[0]
-        adjusted_y = y - self.camera_pos[1]
-
-        adjusted_x *= self.zoom
-        adjusted_y *= self.zoom
-
-        return adjusted_x > -size * self.zoom and adjusted_x < self.width and adjusted_y > -size * self.zoom and adjusted_y < self.height
-
-    def blit(self, image, x, y, size, name=None):
-        adjusted_x = x - self.camera_pos[0]
-        adjusted_y = y - self.camera_pos[1]
-
-        adjusted_x *= self.zoom
-        adjusted_y *= self.zoom       
-        
-
-        if adjusted_x > -size * self.zoom and adjusted_x < self.width and adjusted_y > -size * self.zoom and adjusted_y < self.height:
-            if name:
-                adjusted_image = self.image_cache.get((name, self.zoom))
-
-                if adjusted_image == None:
-                    adjusted_image = self.image_cache.put((name, self.zoom), pygame.transform.scale(image, (size * self.zoom, size * self.zoom)))
-            else:
-                adjusted_image = pygame.transform.scale(image, (size * self.zoom, size * self.zoom))
-
-            self.screen.blit(adjusted_image, (adjusted_x, adjusted_y))
-
-    def create_animation(self, positions, speed, name):
-        for position in positions:
-            ID = None
-            if name == "miner_upgrade":
-                ID = self.debug_id
-                self.debug_id += 1
-
-            self.queued_animations[(position.x, position.y)].append([self.world_to_cord([position.x, position.y]), Animation(name, self.images, id=ID), speed])
-
-    def load_images(self):
-        images = {}
-        for filename in os.listdir("images"):
-            full_path = f"images/{filename}"
-            key = filename[:filename.index(".")]
-
-            images[key] = pygame.image.load(full_path).convert_alpha()
-
-        return images
-    
-    def draw_ui(self, turn, factions, units, cities, unit_selected=None):
-
-        winw, winh = pygame.display.get_window_size()
-
-        self.screen.blit(pygame.transform.scale(self.images["turn_counter"], (200, 50)), (20, 10))
-
-        self.draw_text(self.screen, "turn:", 30, 28, TEXT_COLOR)
-        self.draw_text(self.screen, str(turn), 200 - 9 * len(str(turn)), 28, TEXT_COLOR)
-
-        faction_colors = {key: value.color for key, value in factions.items()}
-        units_by_faction = {key: len(value) for key, value in units.by_faction.items()}
-
-        cities_by_faction = {key: sum(city.faction_id == value.ID for city in cities) for key, value in factions.items()}
-        cities_sum = len(cities)
-
-
-
-        if cities_sum > 0:
-            cities_normalized = {key: value/cities_sum for key, value in cities_by_faction.items()}
-
-            x = 315
-            for i, (key, value) in enumerate(cities_normalized.items()):
-                color = faction_colors[key]
-
-                self.draw_rect_advanced(self.darken(color, 1.5), 200,x, 10, int(value * (winw / 1.7)), 10, (self.darken(color, 3), 2))
-                x += int(value * (winw / 1.7))
-        else:
-            pygame.draw.rect(self.screen, (100, 100, 100), (200, 10, winw // 1.7, 5))
-
-
-        sidebar_mode = "general"
-        if unit_selected: sidebar_mode = "unit"
-
-        self.draw_rect_advanced(MENU_BACKGROUND, 200, winw - 200, 10, 190, winh - 25, (MENU_OUTLINE, 5))
-
-        y = 25
-        if sidebar_mode == "general":
-            menu_surface = pygame.Surface((190, winh - 25), pygame.SRCALPHA)
-
-            y -= self.menu_scroll
-            for fid, faction in factions.items():
-                if fid not in units_by_faction or (cities_by_faction[fid] == 0 and units_by_faction[fid] == 0): continue
-
-                pygame.draw.circle(menu_surface, self.darken(faction.color, 2.5), (20, y+5), 10)
-                pygame.draw.circle(menu_surface, self.darken(faction.color, 1.5), (20, y+5), 8)
-                
-                self.draw_text(menu_surface, faction.ID, 35, y, TEXT_COLOR)
-        
-                pygame.draw.line(menu_surface, self.darken(faction.color, 2.5), (20, y + 15), (20, y + 15 + 25 * 5.7), 3)
-
-                y += 25
-                
-                images = ["time_clock", "unit_icon", "cities_icon", "gold_icon", "wood_icon", "stone_icon"]
-                values = [faction.age, units_by_faction[fid], cities_by_faction[fid], faction.materials["gold"], faction.materials["wood"], faction.materials["stone"]]
-
-                for i in range(len(images)):
-                    image, value = images[i], values[i]
-                    pygame.draw.line(menu_surface, self.darken(faction.color, 2.5), (20, y+6), (50, y+6), 3)
-                    self.draw_text(menu_surface, str(value), 80, y, TEXT_COLOR)
-                    menu_surface.blit(self.images[image], (60, y-2))
-                    y += 25
-
-        elif sidebar_mode == "unit":
-            menu_surface = pygame.Surface((190, winh - 200), pygame.SRCALPHA)
-            if unit_selected.faction_id in factions:
-
-                self.draw_text(menu_surface, "Pos:", 10, y, TEXT_COLOR)
-                self.draw_text(menu_surface, str(unit_selected.pos.x), 60, y, TEXT_COLOR)
-                self.draw_text(menu_surface, str(unit_selected.pos.y), 70 + 9 * len(str(unit_selected.pos.x)), y, TEXT_COLOR)
-
-                y += 25
-
-                self.draw_text(menu_surface, "Type:", 10, y, TEXT_COLOR)
-                self.draw_text(menu_surface, str(unit_selected.utype), 70, y, TEXT_COLOR)
-                y += 25
-           
-                self.draw_text(menu_surface, "Rank:", 10, y, TEXT_COLOR)
-                self.draw_text(menu_surface, str(unit_selected.rank), 70, y, TEXT_COLOR)
-                y += 25
-
-                self.draw_text(menu_surface, "Health:", 10, y, TEXT_COLOR)
-                self.draw_text(menu_surface, str(unit_selected.health), 90, y, TEXT_COLOR)
-                y += 25
-
-                self.draw_text(menu_surface, "Damage:", 10, y, TEXT_COLOR)
-                self.draw_text(menu_surface, str(unit_selected.damage_buff), 90, y, TEXT_COLOR)
-                y += 25
-
-                if unit_selected.targeted_pos:
-                    surface, rect = self.font.render(f"Targeting: {unit_selected.targeted_pos[0]} {unit_selected.targeted_pos[1]}", TEXT_COLOR)
-                    menu_surface.blit(surface, (10, y))
-                    y += 25
-
-                if unit_selected.general_following and unit_selected.general_following.flow_field:
-                    pos = (unit_selected.pos.x, unit_selected.pos.y)
-
-                    if pos in unit_selected.general_following.flow_field:
-                        current_move = unit_selected.general_following.flow_field[pos]
-                        surface, rect = self.font.render(f"Current move: {current_move}", TEXT_COLOR)
-                        menu_surface.blit(surface, (10, y))
-                        y += 25
-
-
-                if unit_selected.rank == "commander":
-                    goal, subgoal = factions[unit_selected.faction_id].goal
-
-                    surface, rect = self.font.render(f"Goal: {goal}", TEXT_COLOR)
-                    menu_surface.blit(surface, (10, y))
-                    y += 25
-
-                    surface, rect = self.font.render(f"Subgoal: {subgoal}", TEXT_COLOR)
-                    menu_surface.blit(surface, (10, y))
-                    y += 25
-
-        self.screen.blit(menu_surface, ((winw - 200, 10)))
-
-    def draw_rect_advanced(self, color, opacity, x, y, width, height, outline=None):
-        surface = pygame.Surface((width, height))
-        surface.set_alpha(opacity)
-        if not outline: surface.fill((color))
-        else:
-            outline_color, width = outline
-            surface.fill(outline_color)
-            surface.fill(color, surface.get_rect().inflate(-width, -width))
-
-        self.screen.blit(surface, (x, y))
-
-    def darken(self, color, strength):
-        return [max(min(int(pixel_value / strength), 255), 0) for pixel_value in color]
-    
-    def get_unit_actual_pos(self, unit):
-        display_pos = unit.display_pos
-        size = 30
-        if unit.rank == "general": size = 50
-        elif unit.rank == "commander": size = 70
-        size += unit.additional_size
-
-        x, y = display_pos[0] - ((size - 30) // 2), display_pos[1] - ((size - 30))
-
-        adjusted_x = x - self.camera_pos[0]
-        adjusted_y = y - self.camera_pos[1]
-
-        adjusted_x *= self.zoom
-        adjusted_y *= self.zoom       
-        
-        visible = adjusted_x > -500 and adjusted_x < self.width and adjusted_y > -500 and adjusted_y < self.height
-        size *= self.zoom
-           
-        return adjusted_x, adjusted_y, size, visible
-
-
-def init_display(sw, sh):
-    pygame.init()
-    screen = pygame.display.set_mode((sw, sh), pygame.RESIZABLE)
-    pygame.display.set_caption('AI Faction Simulation')
-    clock = pygame.time.Clock()
-    display = Display(screen, clock)
-    pygame.key.set_repeat(200, 100)
-    return display
 
 # ###############################################################
 # GAME GENERATION FUCNTIONS
@@ -459,6 +36,10 @@ def init_display(sw, sh):
 # city types, etc), you'll need to edit these functions to have
 # them placed on the map
 # ###############################################################
+TILE_X_OFFSET = 24
+TILE_Y_OFFSET = 12
+IMAGE_SIZE = 50
+
 def gen_game_map(width, height):
     return game_map.GameMap(width, height)
 
@@ -599,7 +180,7 @@ def Turn(factions, gmap, cities_by_faction, units_by_faction, move_cache, unit_d
     commands = []
 
     for fid, f in factions.items():
-        cmds, move_cache = f.run_ai(factions, cities_by_faction, units_by_faction, gmap, move_cache, MODE != "versus", unit_dict, top_models) 
+        cmds, move_cache = f.run_ai(factions, cities_by_faction, units_by_faction, gmap, move_cache, params.MODE != "versus", unit_dict, top_models) 
         commands.extend(cmds)
 
     return commands, move_cache
@@ -635,7 +216,7 @@ def shuffle(commands):
 # Executes all commands from the current turn.
 # Shuffles the commands to reduce P1 bias (maybe).
 # Basically this is just a dispatch function.
-def RunAllCommands(commands, factions, unit_dict, cities, gmap):
+def RunAllCommands(commands, factions, unit_dict, cities, gmap, structures):
 
     commands = shuffle(commands)
     combat_positions = []
@@ -649,7 +230,7 @@ def RunAllCommands(commands, factions, unit_dict, cities, gmap):
         elif isinstance(cmd, command.BuildUnitCommand):
             RunBuildCommand(cmd, factions, unit_dict, cities, gmap)
         elif isinstance(cmd, command.BuildStructureCommand):
-            building_pos = RunBuildStructureCommand(cmd, gmap)
+            building_pos = RunBuildStructureCommand(cmd, gmap, structures)
             if building_pos: buidling_positions.extend(building_pos)
         elif isinstance(cmd, command.DefectCommand):
             RunDefectCommand(cmd, factions, unit_dict)
@@ -693,31 +274,33 @@ def RunDefectCommand(cmd, factions, unit_dict):
     unit_dict.by_faction[name] = new_unit_list[:]
 
 
-def RunBuildStructureCommand(cmd, gmap):
+def RunBuildStructureCommand(cmd, gmap, structures):
     building_pos = []
 
     position = vec2.Vec2(cmd.pos[0], cmd.pos[1])
     succesful_build = False
 
     if cmd.utype == "woodcutter" and cmd.faction.can_build_structure(params.STRUCTURE_COST["woodcutter"]) and gmap.cells[position].terrain == cell_terrain.Terrain.Forest:
-        gmap.cells[position] = Cell(cell_terrain.Terrain.Woodcutter, cmd.faction)
+        gmap.cells[position] = Cell(cell_terrain.Terrain.Woodcutter, position, cmd.faction)
         building_pos.append((position, cmd.utype))
 
         for key, val in params.STRUCTURE_COST["woodcutter"].items():
             cmd.faction.materials[key] -= val
 
-        cmd.faction.structures.append(Structure(vec2.Vec2(cmd.pos[0], cmd.pos[1]), "woodcutter"))
+        cmd.faction.structures.append(gmap.cells[position])
+        structures.append(gmap.cells[position])
         succesful_build = True
 
     if cmd.utype == "miner" and cmd.faction.can_build_structure(params.STRUCTURE_COST["miner"]) and gmap.cells[position].terrain == cell_terrain.Terrain.Stone:
-        gmap.cells[position] = Cell(cell_terrain.Terrain.Miner, cmd.faction)
+        gmap.cells[position] = Cell(cell_terrain.Terrain.Miner, position, cmd.faction)
         building_pos.append((position, cmd.utype))
 
         
         for key, val in params.STRUCTURE_COST["miner"].items():
             cmd.faction.materials[key] -= val
 
-        cmd.faction.structures.append(Structure(vec2.Vec2(cmd.pos[0], cmd.pos[1]), "miner"))
+        cmd.faction.structures.append(gmap.cells[position])
+        structures.append(gmap.cells[position])
         succesful_build = True
 
     if succesful_build: gmap.rerender()
@@ -978,7 +561,7 @@ def handle_mouse_functions(offset, zoom):
 
 import time
 
-def post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures):
+def post_turn_takeovers(cities, unit_dict, factions, gmap, structures):
     for c in cities:
         if c.pos in unit_dict.by_pos and c.faction_id != unit_dict.by_pos[c.pos].faction_id:
             for general in factions[c.faction_id].generals:
@@ -990,28 +573,17 @@ def post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures):
             if unit.general_following:
                 unit.general_following.cities_gained += 1
 
-            
-
-    for fid, faction in factions.items():
-        indexes_to_remove = []
-        for i, structure in enumerate(faction.structures):
-            if structure.pos in unit_dict.by_pos:
-                faction_id = unit_dict.by_pos[structure.pos].faction_id
-                if faction_id == fid: continue
-
-                indexes_to_remove.append(i)
-
-                factions[faction_id].structures.append(structure)
-                gmap.cells[structure.pos].owned_by = factions[faction_id]
         
-        for index in indexes_to_remove[::-1]:
-            faction.structures.pop(index)
 
-    for structure in empty_structures:
-        if structure.pos in unit_dict.by_pos:
-            unit = unit_dict.by_pos[structure.pos]
-            structure.owned_by = factions[unit.faction_id]
+    for cell in structures:
+        if cell.terrain in [cell_terrain.Terrain.Woodcutter, cell_terrain.Terrain.Miner]:
+            if cell.pos in unit_dict.by_pos:
+                faction_id = unit_dict.by_pos[cell.pos].faction_id
+                if faction_id == cell.owned_by: continue
 
+                if cell.owned_by in factions: factions[cell.owned_by].structures.remove(cell)
+                factions[faction_id].structures.append(cell)
+                cell.owned_by = factions[faction_id]
 
 def kill(unit, unit_dict):
     unit.dead = True
@@ -1047,25 +619,25 @@ def GameLoop(display, drawn=True, top_models=[], model_eval=None):
         if c.terrain in (cell_terrain.Terrain.Forest, cell_terrain.Terrain.Stone):
             flow_field_queue.append((v.x, v.y))
 
-    def run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures, top_models):
+    def run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, top_models, structures):
         commands, move_cache = Turn(factions, gmap, cities_by_faction,
                                     unit_dict.by_faction, move_cache, unit_dict, top_models)
-        combat_positions, building_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap)
-        post_turn_takeovers(cities, unit_dict, factions, gmap, empty_structures)
+        combat_positions, building_positions = RunAllCommands(commands, factions, unit_dict, cities, gmap, structures)
+        post_turn_takeovers(cities, unit_dict, factions, gmap, structures)
 
         return move_cache, combat_positions, building_positions
 
     # Starting game speed (real time between turns) in milliseconds.
     current_turn_time_ms = 0
-    speed = 8
+    speed = 12
     ticks = 0
     turn = 1
     GAME_OVER = False
     pressed_time = 0
     selected_unit = None
     dragging, hover = False, False
-    empty_structures = []
     all_stats = {}
+    structures = []
     while not drawn or display.run:
         if drawn: 
             pos, pressed = pygame.mouse.get_pos(), pygame.mouse.get_pressed()
@@ -1081,7 +653,7 @@ def GameLoop(display, drawn=True, top_models=[], model_eval=None):
 
                         # Lower if you want a faster game speed.
                         
-                        speed = speed / 2
+                        speed = speed // 2
                         speed = max(speed, 8)
                     elif event.key == pygame.K_RIGHT:
 
@@ -1092,15 +664,6 @@ def GameLoop(display, drawn=True, top_models=[], model_eval=None):
                     elif event.key == pygame.K_r:
                         return top_models
                         
-                    # elif event.key == pygame.K_u:
-                    #     TILE_X_OFFSET -= 1
-                    # elif event.key == pygame.K_i:
-                    #     TILE_X_OFFSET += 1
-                    # elif event.key == pygame.K_o:
-                    #     TILE_Y_OFFSET -= 1
-                    # elif event.key == pygame.K_p:
-                    #     TILE_Y_OFFSET += 1
-                    
                 elif event.type == pygame.MOUSEWHEEL:
                     if pos[0] > winw - 200 and pos[0] < winw - 10 and pos[1] > 10 and pos[1] < winh - 25:
                         display.menu_scroll += event.y * 10
@@ -1155,7 +718,6 @@ def GameLoop(display, drawn=True, top_models=[], model_eval=None):
                 if len(faction_cities) == 0 and len(unit_dict.by_faction[fid]) == 0:
                     for structure in f.structures:
                         structure.owned_by = None
-                        empty_structures.append(structure)
                     
                     delete_factions.append(fid)
             
@@ -1164,44 +726,23 @@ def GameLoop(display, drawn=True, top_models=[], model_eval=None):
                 del unit_dict.by_faction[fid]
 
 
-            move_cache, combat_positions, building_positions = run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, empty_structures, top_models)
+            move_cache, combat_positions, building_positions = run_turn(factions, gmap, cities_by_faction, unit_dict, move_cache, cities, top_models, structures)
             
             turn += 1
 
             game_over = CheckForGameOver(cities, unit_dict)
             if game_over[0]:
-                if MODE == "nature":
-                    # output = []
-                    # output.append(colored(f"Turn {turn} - Top Models:", 'cyan', attrs=['bold']))
-                    # for i, (score, model, stats) in enumerate(top_models):
-                    #     chosen_percentage = {key: val / model.chosen_count for key, val in model.chosen_percentage.items()}
-                    #     output.append(colored(f"\nRank {i + 1}:", 'yellow', attrs=['bold']))
-                    #     output.append(f"  {colored(f'Score:', 'green')} {score}")
-                    #     output.append(f"  {colored(f'Model breakdown:', 'magenta')} {chosen_percentage}")
-                    #     output.append(f"  {colored(f'Kills:', 'red')} {stats.kills}")
-                    #     output.append(f"  {colored(f'Losses:', 'blue')} {stats.losses}")
-                    #     output.append(f"  {colored(f'Cities Gained:', 'green')} {stats.cities}")
-                    #     output.append(f"  {colored(f'Cities Lost:', 'yellow')} {stats.cities_lost}")
-                    #     output.append(f"  {colored(f'Age (Turns):', 'cyan')} {stats.age}")\
-                    
-                    # output = "\n".join(output)
-                    # os.system('cls' if os.name == 'nt' else 'clear')
-                    # print(output)
-
-                    # top_models[0][1].save(f"models/model_{turn}.npz")
-
+                if params.MODE == "evolution":
                     return factions[game_over[1]].generals[0]
 
 
-                #     return top_models
-                defecting_count = 10
-                for unit in unit_dict.by_faction[game_over[1]]:
-                    if unit.rank == "general" and defecting_count: 
-                        defecting_count -= 1
-                        unit.defecting = True
-                
-                if MODE == "versus":
-                    #print(f"Winning faction: {game_over[1]}")
+             
+                if params.MODE == "endless":
+                    for unit in unit_dict.by_faction[game_over[1]]:
+                        if unit.rank == "general": 
+                            unit.defecting = True
+                    
+                if params.MODE == "versus":
                     GAME_OVER = True
                     return factions[game_over[1]].color
 
@@ -1288,8 +829,10 @@ def GameLoop(display, drawn=True, top_models=[], model_eval=None):
 
             # ###########################################3
             # RIGHT_SIDE UI
-            display.draw_ui(turn, factions, unit_dict, cities, selected_unit)
-    
+            retVal, speed = display.draw_ui(turn, factions, unit_dict, cities, speed, selected_unit)
+
+            if retVal == "reset":
+                return "reset"
 
 
             
@@ -1318,7 +861,7 @@ def main(display=None):
     drawn = True
 
     if not display and drawn:
-        display = init_display(winw, winh)
+        display = isometricDisplay.init_display(winw, winh)
     record = defaultdict(lambda: 0)
     winner = []
     top_winners = {}
@@ -1326,22 +869,26 @@ def main(display=None):
     saved = set([])
     while True:
         top_models = []
-        if params.MODE == "nature":
+        if params.MODE == "evolution":
             winner = []
             if top_winners:
-                print()
                 for model_id in random.choices(list(top_winners.keys()), weights=list(top_winners.values()), k=4):
                     winner.append((1, models_by_id[model_id], 1))
-
-
-                for key, val in sorted(list(top_winners.items()), key=lambda x: x[1]**.5, reverse=True)[:20]:
-                    print(f"{key}: {val}")
 
             top_models = winner
 
         winner = GameLoop(display, drawn=drawn, top_models=top_models)
 
-        if params.MODE == "nature" and winner.NNModel:
+        if winner == "reset":
+            record = defaultdict(lambda: 0)
+            top_winners = {}
+            models_by_id = {}
+            saved = set([])
+
+        
+        if display: display.clear() # Removing extra rendered animations
+
+        if params.MODE == "evolution" and winner and winner != "reset" and winner.NNModel:
             ID = winner.NNModel.id
             
             if ID not in top_winners: top_winners[ID] = 0
@@ -1351,29 +898,50 @@ def main(display=None):
             for winner_id in winner.NNModel.parents:
                 top_winners[winner_id] += 0.25
     
-                if top_winners[winner_id] > 25 and ID not in saved:
+                if top_winners[winner_id] > 5 and ID not in saved:
                     saved.add(winner_id)
                     winner.NNModel.save(f"models/model_{len(saved)}.npz")
 
         
-        if params.MODE == "versus":
+        if winner != "reset" and params.MODE == "versus" and type(winner) == tuple:
             record[winner] += 1
-            print(record)
+            print(f"\nAI: {record[(200, 0, 0)]}")
+            print(f"Aggressive Agent: {record[(0, 0, 200)]}")
 
 def eval_models():
+
+    models = []
     path = f"./models/"
     for model in sorted(os.listdir("./models"), key=lambda x: int(x[x.index("_")+1:x.index(".")])):
         full_path = f"{path}{model}"
+        models.append(full_path)
 
+    params.MODE = "versus"
+    n = 5
+    while models:
 
-        n = 1
-        wins = 0
-        for _ in range(n):
-            winner = GameLoop(None, drawn=False, top_models=[], model_eval=full_path)
+        remove_index = []
+        for i, model in enumerate(models):
+  
+            wins = 0
+            for _ in range(n):
+                winner = GameLoop(None, drawn=False, top_models=[], model_eval=model)
 
-            if winner == (200, 0, 0): wins += 1
+                if winner == (200, 0, 0): wins += 1
 
-        print(f"{model}: wins: {wins} / {n}")
+            
+            if wins < n * 0.7: 
+                print(colored(f"{model}: wins: {wins} / {n}", "red"))
+                remove_index.append(i)
+            else:
+                print(colored(f"{model}: wins: {wins} / {n}", "green"))
+
+        n *= 2
+
+        for index in remove_index[::-1]:
+            models.pop(index)
+
+        
 
 if __name__ == "__main__":
     main()

@@ -54,7 +54,7 @@ class GameMap:
         
         for j, row in enumerate(board):
             for i, tile in enumerate(row):
-                self.cells[vec2.Vec2(i, j)] = cell.Cell(CELL_TRANSLATION_MAP[tile])
+                self.cells[vec2.Vec2(i, j)] = cell.Cell(CELL_TRANSLATION_MAP[tile], vec2.Vec2(i, j))
 
     def smooth(self, board, depth):
         new_board = [[0] * len(board[0]) for _ in range(len(board))]
