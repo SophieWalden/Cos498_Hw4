@@ -11,8 +11,6 @@ class Model:
         self.weights = {}
         self.biases = {}
         self.nodes = []
-        self.chosen_percentage = {0: 0, 1: 0, 2: 0, 3: 0, 4: 0}
-        self.chosen_count = 0
         self.id = random.randint(0, 100000000)
         self.parents = parents
 

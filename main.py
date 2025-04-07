@@ -159,6 +159,7 @@ def FactionPreTurn(cities, faction):
             income = c.generate_income()
             faction.materials['gold'] += income
             
+
     for structure in faction.structures:
         for key, val in structure.generate_material().items():
             faction.materials[key] += val
@@ -576,14 +577,14 @@ def post_turn_takeovers(cities, unit_dict, factions, gmap, structures):
         
 
     for cell in structures:
-        if cell.terrain in [cell_terrain.Terrain.Woodcutter, cell_terrain.Terrain.Miner]:
-            if cell.pos in unit_dict.by_pos:
-                faction_id = unit_dict.by_pos[cell.pos].faction_id
-                if faction_id == cell.owned_by: continue
+        if cell.pos in unit_dict.by_pos:
+            faction_id = unit_dict.by_pos[cell.pos].faction_id
+            if factions[faction_id] == cell.owned_by: continue
 
-                if cell.owned_by in factions: factions[cell.owned_by].structures.remove(cell)
-                factions[faction_id].structures.append(cell)
-                cell.owned_by = factions[faction_id]
+            if cell.owned_by and cell.owned_by.ID in factions: 
+                cell.owned_by.structures.remove(cell)
+            if cell not in factions[faction_id].structures: factions[faction_id].structures.append(cell)
+            cell.owned_by = factions[faction_id]
 
 def kill(unit, unit_dict):
     unit.dead = True
@@ -900,48 +901,13 @@ def main(display=None):
     
                 if top_winners[winner_id] > 5 and ID not in saved:
                     saved.add(winner_id)
-                    winner.NNModel.save(f"models/model_{len(saved)}.npz")
+                    winner.NNModel.save(f"model_saved/model_{len(saved)}.npz")
 
         
         if winner != "reset" and params.MODE == "versus" and type(winner) == tuple:
             record[winner] += 1
             print(f"\nAI: {record[(200, 0, 0)]}")
             print(f"Aggressive Agent: {record[(0, 0, 200)]}")
-
-def eval_models():
-
-    models = []
-    path = f"./models/"
-    for model in sorted(os.listdir("./models"), key=lambda x: int(x[x.index("_")+1:x.index(".")])):
-        full_path = f"{path}{model}"
-        models.append(full_path)
-
-    params.MODE = "versus"
-    n = 5
-    while models:
-
-        remove_index = []
-        for i, model in enumerate(models):
-  
-            wins = 0
-            for _ in range(n):
-                winner = GameLoop(None, drawn=False, top_models=[], model_eval=model)
-
-                if winner == (200, 0, 0): wins += 1
-
-            
-            if wins < n * 0.7: 
-                print(colored(f"{model}: wins: {wins} / {n}", "red"))
-                remove_index.append(i)
-            else:
-                print(colored(f"{model}: wins: {wins} / {n}", "green"))
-
-        n *= 2
-
-        for index in remove_index[::-1]:
-            models.pop(index)
-
-        
 
 if __name__ == "__main__":
     main()

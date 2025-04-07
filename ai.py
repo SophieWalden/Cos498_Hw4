@@ -83,7 +83,6 @@ class AI:
         # Color based assignment so we can know which color is being controlled how    
 
         if params.MODE == "evolution":
-           
             if color == (200, 0, 0):
                 self.system = GANNSystem()
             else:
@@ -91,7 +90,6 @@ class AI:
         elif params.MODE == "endless":
             self.system = GANNSystem()
         else:
-            
             if starting_model:
                 self.system = GANNSystem(starting_model)
             elif color == (200, 0, 0):
@@ -238,16 +236,16 @@ class AggressorSystem:
 
     def tick(self, current_faction, current_units, current_cities, current_cities_pos, current_units_pos, factions, units, gmap, cities, total_cities, current_structures_pos, move_cache, top_models, unit_dict):        
         for general in current_faction.generals:
-            if not general.targeted_pos and total_cities != len(current_cities):
+            if total_cities == len(current_cities):
+                general.choose_targeted_unit(units, gmap, move_cache) 
+
+            elif not general.targeted_pos:
                 targeted_point = general.choose_targeted_city(cities, factions, current_faction.goal[1], gmap, move_cache)
                 general.targeted_pos = targeted_point
                 general.create_flow_field(targeted_point, gmap, move_cache)
 
-                general.targeting_age = current_faction.age
+            
 
-            if total_cities == len(current_cities):
-                general.choose_targeted_unit(units, gmap, move_cache) 
-                general.targeting_age = current_faction.age
 
         for ci in list(range(len(current_cities))):
             self.build_units_queue.append((current_cities[ci].ID, random.choice(['R', 'S', 'P']), {"wood": current_faction.materials["wood"]//4, "stone": current_faction.materials['stone']//4}))
@@ -338,7 +336,37 @@ class GANNSystem:
         self.build_units_queue = []
         self.build_structures_queue = []
         self.base_model = base_models
-        self.need_commander = False
+        self.need_commander = params.MODE == "endless"
+
+    def score_model(self, general, top_models, faction):
+        score = 0
+
+        score += general.soldiers_killed * 100
+        score -= general.soldiers_lost * 120
+        
+        score += general.cities_gained * 500
+        score -= general.cities_lost * 510
+        
+        score -= (faction.age - general.creation_age) * 5
+        
+        for i, (old_score, model, _) in enumerate(top_models):
+            if model == general.NNModel:
+                if score > old_score:
+                    top_models[i][0] = score
+                    top_models[i][2] = Stats(general, faction.age - general.creation_age) 
+                    top_models.sort(key=lambda x: x[0], reverse=True)
+
+                break
+        
+        else:
+            if len(top_models) < 4:
+                top_models.append([score, general.NNModel,Stats(general, faction.age - general.creation_age) ])
+                top_models.sort(key=lambda x: x[0], reverse=True)
+            elif score > top_models[-1][0]:
+                top_models.append([score, general.NNModel, Stats(general, faction.age - general.creation_age) ])
+                top_models.sort(key=lambda x: x[0], reverse=True)
+                top_models.pop(-1)
+
 
     def make_decision(self, general, current_cities, total_cities, current_cities_pos, cities, factions, current_faction, unit_dict, gmap, move_cache):
 
@@ -454,9 +482,9 @@ class GANNSystem:
 
                 if decision == 4: # Defend current position this turn
                     pass
-        
-                general.NNModel.chosen_percentage[decision] += 1
-                general.NNModel.chosen_count += 1
+
+
+            if params.MODE == "endless" and (current_faction.age - general.creation_age) > 10: self.score_model(general, top_models, current_faction)
 
 
 
